@@ -5,14 +5,28 @@ import random
 # g class (stores global parameters)
 
 class g:
+    # patient arrivals 
     patient_inter = 30
+
+    # consult times 
     mean_nurse_time = 20
     mean_doctor_time = 60 # need to edit this for different grades
     mean_consultant_time = 20
+    mean_ix_time = 90
+
+    #resources
     number_of_nurses = 4
     number_of_doctors = 2
     number_of_consultants = 1
-    sim_duration = 600
+
+    # probabilities
+    prob_doctor_discharge = 0.1
+    prob_consultant_discharge = 0.8
+
+    #sim meta data 
+    warm_up_period = 1440 # 24 hour warm up period 
+    trial_period = 2880 # 2 days 
+    sim_duration = warm_up_period + trial_period
     number_of_runs = 5
 
 # patient class (represents patients coming into acute services)
@@ -64,7 +78,7 @@ class Model:
         self.results_df["Q Time Consultant"] = [0.0]
         self.results_df["Time with Consultant"] = [0.0]
         self.results_df["Total Journey Time"] = [0.0]
-        self.results_df.set_index("Patient ID", inplace=True)
+       # self.results_df.set_index("Patient ID", inplace=True)
 
         self.mean_q_time_nurse = 0
         self.mean_q_time_doctor = 0
@@ -73,10 +87,13 @@ class Model:
     # generator function to arrive at hospital
     def generator_patient_arrival (self):
         while True:
-            self.patient_counter += 1 
+            self.patient_counter += 1
             p = Patient (self.patient_counter)
             p.start_time = self.env.now 
             self.env.process (self.attend_hospital (p))
+
+            #print(f"Generating Patient {self.patient_counter} at time {self.env.now}")
+
             #randomly sample time to patient arrival
             sampled_inter = random.expovariate (1.0/ g.patient_inter)
             yield self.env.timeout (sampled_inter)
@@ -87,7 +104,7 @@ class Model:
     # need to add a differentiator so there is a pathway for ED and SDEC with 
     # a proportion of patients passing down each pathway 
 
-        # nurse process 
+        # nurse triage process 
         start_q_nurse = self.env.now
         with self.nurse.request() as req:
             yield req
@@ -97,7 +114,7 @@ class Model:
             sampled_nurse_time = random.expovariate (1.0/ g.mean_nurse_time)
             yield self.env.timeout(sampled_nurse_time)
 
-        # doctor process 
+        # medical clerking process 
         start_q_doctor = self.env.now
         with self.doctor.request() as req:
             yield req
@@ -108,7 +125,7 @@ class Model:
             yield self.env.timeout(sampled_doctor_time)
 
         # investigation sink
-        ix_time = random.expovariate(1.0 / 90)
+        ix_time = random.expovariate(1.0 / g.mean_ix_time)
         patient.ix_time = ix_time
         yield self.env.timeout(ix_time)
 
@@ -125,18 +142,19 @@ class Model:
          # time_in_dept - calculate how long patient in dept in total
         total_time = self.env.now - patient.start_time
 
-        # record outputs
-        self.results_df.loc[len(self.results_df)] = {
-            "Patient ID": patient.id,
-            "Q Time Nurse": patient.q_time_nurse,
-            "Time with Nurse": sampled_nurse_time,
-            "Q Time Doctor": patient.q_time_doctor,
-            "Time with Doctor": sampled_doctor_time,
-            "Time for Ix": ix_time,
-            "Q Time Consultant": patient.q_time_consultant,
-            "Time with Consultant": sampled_consultant_time,
-            "Total Journey Time": total_time
-        }
+        # record outputs (after the warm up period has elapsed)
+        if self.env.now >= g.warm_up_period:
+            self.results_df.loc[len(self.results_df)] = {
+                "Patient ID": patient.id,
+                "Q Time Nurse": patient.q_time_nurse,
+                "Time with Nurse": sampled_nurse_time,
+                "Q Time Doctor": patient.q_time_doctor,
+                "Time with Doctor": sampled_doctor_time,
+                "Time for Ix": ix_time,
+                "Q Time Consultant": patient.q_time_consultant,
+                "Time with Consultant": sampled_consultant_time,
+                "Total Journey Time": total_time
+            }
         
         # could include a proportion of patients discharged pre-PTWR as a proportion
 
@@ -188,7 +206,7 @@ class Trial:
             }
         self.print_trial_results()
 
-print ("Testing 123")
+#print ("Testing 123")
 
 trial_1 = Trial ()
 trial_1.run_trial()
