@@ -23,9 +23,15 @@ class ED_Model:
         self.run_number = run_number 
 
         #set dataframe to record results
-        self.results_df = pd.DataFrame(columns = ["Patient ID", "Patient Route","Q Time Take Doctor",
-                                                  "Time with Take Doctor", "Time for Ix",
-                                                  "Type of PTWR", "Q Time Cardio Consultant", 
+        self.results_df = pd.DataFrame(columns = ["Patient ID", "Patient Route",
+                                                  "Q Time Take Doctor",
+                                                  "Time with Take Doctor", 
+                                                  "Number of Patients Clerked", 
+                                                  "Time for Ix",
+                                                  "Type of PTWR", 
+                                                  "Number of Patients seen by Cardio",
+                                                  "Number of Patients seen by Medicine",
+                                                  "Q Time Cardio Consultant", 
                                                   "Q Time Medical Consultant", 
                                                   "Time with Cardio Consultant", 
                                                   "Time with Medical Consultant", 
@@ -89,6 +95,7 @@ class ED_Model:
         print ("Investigations complete")
 
         # PTWR process: can either see a cardiology consultant or a medical consultant
+        # dependent on probability (proportion cardio v medicine)
 
         if  patient.flow == "cardio":
 
@@ -123,9 +130,12 @@ class ED_Model:
             "Patient ID": patient.id,
             "Patient Route": patient_route,
             "Q Time Take Doctor": patient.q_time_take_doctor,
+            "Number of Patients Clerked":
             "Time with Take Doctor": sampled_take_doctor_time,
             "Time for Ix": ix_time,
             "Type of PTWR": patient.flow,
+            "Number of Patients seen by Cardio":
+            "Number of Patients seen by Medicine": 
             "Q Time Cardio Consultant": getattr(patient, "q_time_cardio_consultant", 0.0),
             "Q Time Medical Consultant": getattr(patient, "q_time_medical_consultant", 0.0),
             "Time with Cardio Consultant": sampled_cardio_consultant_time if patient.flow == "cardio" else 0.0,
