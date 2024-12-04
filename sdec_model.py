@@ -2,36 +2,8 @@ import pandas as pd
 import simpy
 import random
 
-# g class (stores global parameters)
-
-class g:
-    patient_inter = 30
-    mean_nurse_time = 20
-    mean_doctor_time = 60 # need to edit this for different grades
-    mean_consultant_time = 20
-    number_of_nurses = 4
-    number_of_doctors = 2
-    number_of_consultants = 1
-    sim_duration = 600
-    number_of_runs = 5
-
-# patient class (represents patients coming into acute services)
-# add patient news score, age, frailty score 
-
-class Patient: 
-    def __init__(self, patient_id):
-        self.id = patient_id
-        self.start_time = 0
-        self.q_time_nurse = 0
-        self.q_time_doctor = 0 
-        self.q_time_consultant = 0
-        self.ix_time = 0
-       #self.news_score
-       #self.frailty
-       #self.age 
-       #self.confused
-       #self.needs_iv_therapy 
-       #self.priority (need some logic with news)
+from class_def import g 
+from class_def import Patient
 
 # model class
 class Model: 
