@@ -21,33 +21,18 @@ class ED_Model:
         self.cardio_consultant = simpy.Resource (self.env, 
             capacity = g.number_of_cardio_consultants)
         self.run_number = run_number 
-        #self.results_df = pd.DataFrame (columns= [
-            # "Patient ID", "Q Time Nurse", "Time with Nurse",
-            # "Q Time Doctor", "Time with Doctor",
-            # "Q Time Consultant", "Time with Consultant", "Total Journey Time"])
-        
-        '''self.results_df = pd.DataFrame(columns = ["Patient ID", "Q Time Doctor",
-                                                  "Time with Doctor", "Time for Ix",
+
+        #set dataframe to record results
+        self.results_df = pd.DataFrame(columns = ["Patient ID", "Patient Route","Q Time Take Doctor",
+                                                  "Time with Take Doctor", "Time for Ix",
                                                   "Type of PTWR", "Q Time Cardio Consultant", 
                                                   "Q Time Medical Consultant", 
                                                   "Time with Cardio Consultant", 
                                                   "Time with Medical Consultant", 
-                                                  "Total Journey Time" ])'''
-
-        self.results_df = pd.DataFrame()
-        self.results_df["Patient ID"] = [1]
-        self.results_df["Patient Route"] = [None]
-        self.results_df["Q Time Take Doctor"] = [0.0]
-        self.results_df["Time with Take Doctor"] = [0.0]
-        self.results_df["Time for Ix"] = [0.0]
-        self.results_df["Type of PTWR"] = [None]
-        self.results_df["Q Time Cardio Consultant"] = [0.0]
-        self.results_df["Q Time Medical Consultant"] = [0.0]
-        self.results_df["Time with Cardio Consultant"] = [0.0]
-        self.results_df["Time with Medical Consultant"] = [0.0]
-        self.results_df["Total Journey Time"] = [0.0]
+                                                  "Total Journey Time" ])
         self.results_df.set_index("Patient ID", inplace=True)
 
+        # set starting values
         self.mean_q_time_take_doctor = 0
         self.mean_q_time_cardio_consultant = 0
         self.mean_q_time_medical_consultant = 0
@@ -55,7 +40,7 @@ class ED_Model:
         sampled_cardio_consultant_time = 0
         sampled_medical_consultant_time = 0
 
-        print ("Pass the constructor")
+        print ("Passed the constructor")
 
     # generator function to arrive at hospital
     def generator_patient_arrival (self):
@@ -80,7 +65,7 @@ class ED_Model:
 
         # doctor clerking process 
         start_q_take_doctor = self.env.now
-        with self.doctor.request() as req:
+        with self.take_doctor.request() as req:
             yield req
             end_q_take_doctor = self.env.now
             # need to consider changing this to log normal
@@ -141,13 +126,13 @@ class ED_Model:
             "Time with Take Doctor": sampled_take_doctor_time,
             "Time for Ix": ix_time,
             "Type of PTWR": patient.flow,
-            #"Q Time Cardio Consultant": patient.q_time_cardio_consultant
-            #"Q Time Medical Consultant": patient.q_time_medical_consultant,
-            #"Time with Cardio Consultant": sampled_cardio_consultant_time,
-            #"Time with Medical Consultant": sampled_medical_consultant_time,
+            "Q Time Cardio Consultant": getattr(patient, "q_time_cardio_consultant", 0.0),
+            "Q Time Medical Consultant": getattr(patient, "q_time_medical_consultant", 0.0),
+            "Time with Cardio Consultant": sampled_cardio_consultant_time if patient.flow == "cardio" else 0.0,
+            "Time with Medical Consultant": sampled_medical_consultant_time if patient.flow == "medical" else 0.0,
             "Total Journey Time": total_time
         }
-    
+    '''
         if patient.flow == "cardio":
             self.results_df.loc[len(self.results_df)] = {
             "Q Time Cardio Consultant": patient.q_time_cardio_consultant,
@@ -156,7 +141,7 @@ class ED_Model:
         else:
             self.results_df.loc[len(self.results_df)] = {
             "Q Time Medical Consultant": patient.q_time_medical_consultant,
-             "Time with Medical Consultant": sampled_medical_consultant_time}
+             "Time with Medical Consultant": sampled_medical_consultant_time}'''
 
     def calculate_run_result (self):
         self.mean_q_time_take_doctor = self.results_df["Q Time Take Doctor"].mean()
