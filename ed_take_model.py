@@ -132,16 +132,6 @@ class ED_Model:
             "Time with Medical Consultant": sampled_medical_consultant_time if patient.flow == "medical" else 0.0,
             "Total Journey Time": total_time
         }
-    '''
-        if patient.flow == "cardio":
-            self.results_df.loc[len(self.results_df)] = {
-            "Q Time Cardio Consultant": patient.q_time_cardio_consultant,
-            "Time with Cardio Consultant": sampled_cardio_consultant_time}
-
-        else:
-            self.results_df.loc[len(self.results_df)] = {
-            "Q Time Medical Consultant": patient.q_time_medical_consultant,
-             "Time with Medical Consultant": sampled_medical_consultant_time}'''
 
     def calculate_run_result (self):
         self.mean_q_time_take_doctor = self.results_df["Q Time Take Doctor"].mean()
@@ -168,8 +158,10 @@ class Trial:
     # dataframe for trial results 
     def  __init__(self):
         self.df_trial_results = pd.DataFrame(columns=[
-            "Run Number","Mean Q Time Take Doctor","Mean Q Time Cardio Consultant", 
-            "Mean Q Time Medical Consultant","Mean Journey Time"
+            "Run Number","Average Patients per Run", "Average No Patients clerked",
+            "Mean Q Time Take Doctor","Average No Patients seen by Cardio", 
+            "Average No Patients seen by Medicine", "Mean Q Time Cardio Consultant", "Mean Q Time Medical Consultant",
+            "Mean Journey Time"
         ])
 
     # print and record trial results
@@ -186,7 +178,11 @@ class Trial:
 
             self.df_trial_results.loc[len(self.df_trial_results)] = {
                 "Run Number": run,
+                "Average Patients per Run":
+                "Average No Patients Clerked":
                 "Mean Q Time Take Doctor": ed_model.mean_q_time_take_doctor,
+                "Average No Patients seen by Cardio":
+                "Average No Patients seen by Medicine":
                 "Mean Q Time Cardio Consultant": ed_model.mean_q_time_cardio_consultant,
                 "Mean Q Time Medical Consultant": ed_model.mean_q_time_medical_consultant,
                 "Mean Journey Time": ed_model.mean_journey_time
