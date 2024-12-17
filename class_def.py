@@ -1,7 +1,9 @@
 
 class g:
     # patient arrivals 
-    patient_inter = 30
+    sdec_patient_inter = 30
+    ed_patient_inter = 30
+    ed_med_expect_inter = 90
 
     # consult times 
     mean_nurse_time = 20
@@ -23,7 +25,7 @@ class g:
 
     # probabilities
     prob_doctor_discharge = 0.1
-    prob_consultant_discharge = 0.8
+    prob_consultant_discharge = 0.6
     prob_needs_cardioptwr = 0.1
 
     #sim meta data 
