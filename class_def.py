@@ -14,6 +14,7 @@ class g:
     mean_medical_consultant_time = 20
     mean_sdec_ix_time = 90
     mean_ed_ix_time = 30
+    mean_ed_med_expect_ix_time = 90
 
     #resources
     number_of_nurses = 4
@@ -28,6 +29,7 @@ class g:
     prob_sdec_admit = 0.3
     prob_cardio_admit = 0.7
     prob_medical_admit = 0.9
+    prob_medical_expect_admit = 0.8
     prob_needs_cardioptwr = 0.1
 
 
