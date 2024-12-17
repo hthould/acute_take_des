@@ -22,7 +22,7 @@ class Model:
             capacity = g.number_of_consultants)
         self.run_number = run_number 
         self.results_df = pd.DataFrame (columns= [
-           "Patient ID", "Q Time Nurse", "Time with Nurse",
+           "Patient ID", "Patient Route", "Q Time Nurse", "Time with Nurse",
            "Q Time Doctor", "Time with Doctor","Time for Ix",
            "Q Time Consultant", "Time with Consultant", 
            "Disposition Time", "Patient Disposition", 
@@ -63,6 +63,8 @@ class Model:
     
     # generator function to pass through medical take 
     def attend_hospital (self, patient):
+
+        patient_route = "SDEC"
 
     # need to add a differentiator so there is a pathway for ED and SDEC with 
     # a proportion of patients passing down each pathway 
@@ -124,6 +126,7 @@ class Model:
         # record outputs
         self.results_df.loc[len(self.results_df)] = {
             "Patient ID": patient.id,
+            "Patient Route": patient_route,
             "Q Time Nurse": patient.q_time_nurse,
             "Time with Nurse": sampled_nurse_time,
             "Q Time Doctor": patient.q_time_doctor,
