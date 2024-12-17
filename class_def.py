@@ -26,7 +26,8 @@ class g:
     # probabilities
     prob_doctor_discharge = 0.1
     prob_sdec_admit = 0.3
-    prob_ed_admit = 0.9
+    prob_cardio_admit = 0.7
+    prob_medical_admit = 0.9
     prob_needs_cardioptwr = 0.1
 
 
@@ -50,6 +51,9 @@ class Patient:
         self.q_time_medical_consultant = 0
         self.q_time_cardio_consultant = 0
         self.ix_time = 0
+        self.total_time_in_dept = 0
+        self.disposition = None
+        self.decision_to_admit_time = 0 
        #self.news_score
        #self.frailty
        #self.age 
