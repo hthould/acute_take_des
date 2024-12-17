@@ -25,8 +25,10 @@ class g:
 
     # probabilities
     prob_doctor_discharge = 0.1
-    prob_consultant_discharge = 0.6
+    prob_sdec_admit = 0.3
+    prob_ed_admit = 0.9
     prob_needs_cardioptwr = 0.1
+
 
     #sim meta data 
     warm_up_period = 1440 # 24 hour warm up period 
