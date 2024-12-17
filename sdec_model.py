@@ -2,50 +2,8 @@ import pandas as pd
 import simpy
 import random
 
-# g class (stores global parameters)
-
-class g:
-    # patient arrivals 
-    patient_inter = 30
-
-    # consult times 
-    mean_nurse_time = 20
-    mean_doctor_time = 60 # need to edit this for different grades
-    mean_consultant_time = 20
-    mean_ix_time = 90
-
-    #resources
-    number_of_nurses = 4
-    number_of_doctors = 2
-    number_of_consultants = 1
-
-    # probabilities
-    prob_doctor_discharge = 0.1
-    prob_consultant_discharge = 0.8
-
-    #sim meta data 
-    warm_up_period = 1440 # 24 hour warm up period 
-    trial_period = 2880 # 2 days 
-    sim_duration = warm_up_period + trial_period
-    number_of_runs = 5
-
-# patient class (represents patients coming into acute services)
-# add patient news score, age, frailty score 
-
-class Patient: 
-    def __init__(self, patient_id):
-        self.id = patient_id
-        self.start_time = 0
-        self.q_time_nurse = 0
-        self.q_time_doctor = 0 
-        self.q_time_consultant = 0
-        self.ix_time = 0
-       #self.news_score
-       #self.frailty
-       #self.age 
-       #self.confused
-       #self.needs_iv_therapy 
-       #self.priority (need some logic with news)
+from class_def import g
+from class_def import Patient
 
 # model class
 class Model: 
@@ -63,11 +21,15 @@ class Model:
         self.consultant = simpy.Resource (self.env, 
             capacity = g.number_of_consultants)
         self.run_number = run_number 
-        #self.results_df = pd.DataFrame (columns= [
-           # "Patient ID", "Q Time Nurse", "Time with Nurse",
-           # "Q Time Doctor", "Time with Doctor",
-           # "Q Time Consultant", "Time with Consultant", "Total Journey Time"])
+        self.results_df = pd.DataFrame (columns= [
+           "Patient ID", "Patient Route", "Q Time Nurse", "Time with Nurse",
+           "Q Time Doctor", "Time with Doctor","Time for Ix",
+           "Q Time Consultant", "Time with Consultant", 
+           "Disposition Time", "Patient Disposition", 
+           "Total Journey Time"])
+        self.results_df.set_index("Patient ID", inplace=True)
 
+        '''
         self.results_df = pd.DataFrame()
         self.results_df["Patient ID"] = [1]
         self.results_df["Q Time Nurse"] = [0.0]
@@ -77,8 +39,12 @@ class Model:
         self.results_df["Time for Ix"] = [0.0]
         self.results_df["Q Time Consultant"] = [0.0]
         self.results_df["Time with Consultant"] = [0.0]
+        self.results_df["Decision To Admit Time"] = [0.0]
+        self.results_df["Patient Disposition"] = []
         self.results_df["Total Journey Time"] = [0.0]
-       # self.results_df.set_index("Patient ID", inplace=True)
+        self.results_df.set_index("Patient ID", inplace=True)
+
+        '''
 
         self.mean_q_time_nurse = 0
         self.mean_q_time_doctor = 0
@@ -95,11 +61,13 @@ class Model:
             #print(f"Generating Patient {self.patient_counter} at time {self.env.now}")
 
             #randomly sample time to patient arrival
-            sampled_inter = random.expovariate (1.0/ g.patient_inter)
+            sampled_inter = random.expovariate (1.0/ g.sdec_patient_inter)
             yield self.env.timeout (sampled_inter)
     
     # generator function to pass through medical take 
     def attend_hospital (self, patient):
+
+        patient_route = "SDEC"
 
     # need to add a differentiator so there is a pathway for ED and SDEC with 
     # a proportion of patients passing down each pathway 
@@ -123,6 +91,8 @@ class Model:
             patient.q_time_doctor = end_q_doctor - start_q_doctor
             sampled_doctor_time = random.expovariate (1.0/ g.mean_doctor_time)
             yield self.env.timeout(sampled_doctor_time)
+        
+        # could include a proportion of patients discharged pre-PTWR as a proportion
 
         # investigation sink
         ix_time = random.expovariate(1.0 / g.mean_ix_time)
@@ -137,26 +107,40 @@ class Model:
             # need to consider changing this to log normal
             patient.q_time_consultant = end_q_consultant - start_q_consultant
             sampled_consultant_time = random.expovariate (1.0/ g.mean_consultant_time)
+            
+            # Decision to admit
+            admission_probability = g.prob_sdec_admit 
+            if random.random() < admission_probability:
+                # Patient is admitted
+                patient.disposition = "admitted"
+                #decision_to_admit_time = self.env.now - patient.start_time
+            else:
+                # Patient is discharged
+                patient.disposition = "discharged"
+
             yield self.env.timeout(sampled_consultant_time)
+
+        # timestamp for admission decision 
+        decision_to_admit_time = self.env.now - patient.start_time
 
          # time_in_dept - calculate how long patient in dept in total
         total_time = self.env.now - patient.start_time
 
-        # record outputs (after the warm up period has elapsed)
-        if self.env.now >= g.warm_up_period:
-            self.results_df.loc[len(self.results_df)] = {
-                "Patient ID": patient.id,
-                "Q Time Nurse": patient.q_time_nurse,
-                "Time with Nurse": sampled_nurse_time,
-                "Q Time Doctor": patient.q_time_doctor,
-                "Time with Doctor": sampled_doctor_time,
-                "Time for Ix": ix_time,
-                "Q Time Consultant": patient.q_time_consultant,
-                "Time with Consultant": sampled_consultant_time,
-                "Total Journey Time": total_time
-            }
-        
-        # could include a proportion of patients discharged pre-PTWR as a proportion
+        # record outputs
+        self.results_df.loc[len(self.results_df)] = {
+            "Patient ID": patient.id,
+            "Patient Route": patient_route,
+            "Q Time Nurse": patient.q_time_nurse,
+            "Time with Nurse": sampled_nurse_time,
+            "Q Time Doctor": patient.q_time_doctor,
+            "Time with Doctor": sampled_doctor_time,
+            "Time for Ix": ix_time,
+            "Q Time Consultant": patient.q_time_consultant,
+            "Time with Consultant": sampled_consultant_time,
+            "Disposition Time": decision_to_admit_time,
+            "Patient Disposition": patient.disposition,
+            "Total Journey Time": total_time
+        }
 
     def calculate_run_result (self):
         self.mean_q_time_nurse = self.results_df["Q Time Nurse"].mean()
