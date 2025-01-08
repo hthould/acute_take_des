@@ -20,8 +20,9 @@ class g:
     number_of_nurses = 4
     number_of_sdec_doctors = 2
     number_of_take_doctors = 4
-    number_of_consultants = 1
-    number_of_medical_consultants = 1
+    number_of_acute_consultants = 1
+    number_of_sdec_consultants = 1
+    number_of_pod_consultants = 1
     number_of_cardio_consultants = 1
 
     # probabilities
