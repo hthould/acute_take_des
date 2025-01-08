@@ -7,7 +7,7 @@ class g:
 
     # consult times 
     mean_nurse_time = 20
-    mean_doctor_time = 60 # need to edit this for different grades
+    mean_sdec_doctor_time = 60 # need to edit this for different grades
     mean_take_doctor_time = 60 # need to edit this for different grades
     mean_consultant_time = 20
     mean_cardio_consultant_time = 20
@@ -18,7 +18,7 @@ class g:
 
     #resources
     number_of_nurses = 4
-    number_of_doctors = 2
+    number_of_sdec_doctors = 2
     number_of_take_doctors = 4
     number_of_consultants = 1
     number_of_medical_consultants = 1
