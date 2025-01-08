@@ -16,14 +16,16 @@ class Model:
         # resources
         self.nurse = simpy.Resource (self.env, 
             capacity = g.number_of_nurses)
-        self.doctor = simpy.Resource (self.env, 
-            capacity = g.number_of_doctors)
+        self.sdec_doctor = simpy.Resource (self.env, 
+            capacity = g.number_of_sdec_doctors)
+        self.take_doctor = simpy.Resource (self.env, 
+            capacity = g.number_of_take_doctors)
         self.consultant = simpy.Resource (self.env, 
             capacity = g.number_of_consultants)
         self.run_number = run_number 
         self.results_df = pd.DataFrame (columns= [
            "Patient ID", "Patient Route", "Q Time Nurse", "Time with Nurse",
-           "Q Time Doctor", "Time with Doctor","Time for Ix",
+           "Q Time Doctor", "Time with Doctor", "Doctor Source","Time for Ix",
            "Q Time Consultant", "Time with Consultant", 
            "Disposition Time", "Patient Disposition", 
            "Total Journey Time"])
@@ -84,18 +86,40 @@ class Model:
 
         # medical clerking process 
         start_q_doctor = self.env.now
-        with self.doctor.request() as req:
+        sdec_used = False
+        
+        with self.sdec_doctor.request() as req_sdec:
+            result = yield req_sdec | self.env.timeout(0)  # Try to acquire SDEC doctor immediately
+            if req_sdec in result:
+                sdec_used = True
+                end_q_doctor = self.env.now
+                patient.q_time_doctor = end_q_doctor - start_q_doctor
+                sampled_doctor_time = random.expovariate(1.0 / g.mean_sdec_doctor_time)
+                yield self.env.timeout(sampled_doctor_time)
+            else:
+            # Fallback to using a take doctor if no SDEC doctor is available
+                with self.take_doctor.request() as req_take:
+                    yield req_take
+                    end_q_doctor = self.env.now
+                    patient.q_time_doctor = end_q_doctor - start_q_doctor
+                    sampled_doctor_time = random.expovariate(1.0 / g.mean_take_doctor_time)
+                    yield self.env.timeout(sampled_doctor_time)
+           
+        patient.doctor_type = "SDEC Doctor" if sdec_used else "Take Doctor"
+
+
+        '''with self.doctor.request() as req:
             yield req
             end_q_doctor = self.env.now
             # need to consider changing this to log normal
             patient.q_time_doctor = end_q_doctor - start_q_doctor
             sampled_doctor_time = random.expovariate (1.0/ g.mean_doctor_time)
-            yield self.env.timeout(sampled_doctor_time)
+            yield self.env.timeout(sampled_doctor_time)'''
         
         # could include a proportion of patients discharged pre-PTWR as a proportion
 
         # investigation sink
-        ix_time = random.expovariate(1.0 / g.mean_ix_time)
+        ix_time = random.expovariate(1.0 / g.mean_sdec_ix_time)
         patient.ix_time = ix_time
         yield self.env.timeout(ix_time)
 
@@ -134,6 +158,7 @@ class Model:
             "Time with Nurse": sampled_nurse_time,
             "Q Time Doctor": patient.q_time_doctor,
             "Time with Doctor": sampled_doctor_time,
+            "Doctor Source": patient.doctor_type,
             "Time for Ix": ix_time,
             "Q Time Consultant": patient.q_time_consultant,
             "Time with Consultant": sampled_consultant_time,
