@@ -20,7 +20,7 @@ class Model:
         self.take_doctor = simpy.Resource (self.env, 
             capacity = g.number_of_take_doctors)
         self.acute_consultant = simpy.Resource (self.env, 
-            capacity = g.number_of_acute_consultants)
+            capacity = g.number_of_acute_med_consultants)
         self.sdec_consultant = simpy.Resource (self.env, 
             capacity = g.number_of_sdec_consultants)
         self.pod_consultant = simpy.Resource (self.env, 
@@ -62,318 +62,349 @@ class Model:
 
     def attend_hospital (self, patient):
 
-    # define patient route here (SDEC, Med Expect, ED)
-    patient_route = "SDEC" or "ED" or "ED Med Expect"
+        # define patient route here (SDEC, Med Expect, ED)
+        patient_route = ["SDEC", "ED", "ED Med Expect"]
+        route_probabilities = [g.sdec_probability, g.ed_probability, g.ed_med_expect_probability]
 
-    if patient_route == "SDEC":
+        chosen_pathway = random.choices(patient_route, route_probabilities)[0]
+
+        if patient_route == "SDEC":
+            
+            print ("Patient arrived in SDEC")
+
+            # nurse triage process 
+            start_q_nurse = self.env.now
+            with self.nurse.request() as req:
+                yield req
+                end_q_nurse = self.env.now
+                # need to consider changing this to log normal
+                patient.q_time_nurse = end_q_nurse - start_q_nurse
+                sampled_nurse_time = random.expovariate (1.0/ g.mean_nurse_time)
+                yield self.env.timeout(sampled_nurse_time)
+
+            # medical clerking process 
+            start_q_doctor = self.env.now
+            sdec_used = False
         
-        print ("Patient arrived in SDEC")
-
-        # nurse triage process 
-        start_q_nurse = self.env.now
-        with self.nurse.request() as req:
-            yield req
-            end_q_nurse = self.env.now
-            # need to consider changing this to log normal
-            patient.q_time_nurse = end_q_nurse - start_q_nurse
-            sampled_nurse_time = random.expovariate (1.0/ g.mean_nurse_time)
-            yield self.env.timeout(sampled_nurse_time)
-
-        # medical clerking process 
-        start_q_doctor = self.env.now
-        sdec_used = False
-        
-        with self.sdec_doctor.request() as req_sdec:
-            result = yield req_sdec | self.env.timeout(0)  # Try to acquire SDEC doctor immediately
-            if req_sdec in result:
-                sdec_used = True
-                end_q_doctor = self.env.now
-                patient.q_time_doctor = end_q_doctor - start_q_doctor
-                sampled_doctor_time = random.expovariate(1.0 / g.mean_sdec_doctor_time)
-                yield self.env.timeout(sampled_doctor_time)
-            else:
-            # Fallback to using a take doctor if no SDEC doctor is available
-                with self.take_doctor.request() as req_take:
-                    yield req_take
+            with self.sdec_doctor.request() as req_sdec:
+                result = yield req_sdec | self.env.timeout(0)  # Try to acquire SDEC doctor immediately
+                if req_sdec in result:
+                    sdec_used = True
                     end_q_doctor = self.env.now
                     patient.q_time_doctor = end_q_doctor - start_q_doctor
-                    sampled_doctor_time = random.expovariate(1.0 / g.mean_take_doctor_time)
+                    sampled_doctor_time = random.expovariate(1.0 / g.mean_sdec_doctor_time)
                     yield self.env.timeout(sampled_doctor_time)
-           
-        patient.doctor_type = "SDEC Doctor" if sdec_used else "Take Doctor"
-        
-        # could include a proportion of patients discharged pre-PTWR as a proportion
-
-        # investigation sink
-        ix_time = random.expovariate(1.0 / g.mean_sdec_ix_time)
-        patient.ix_time = ix_time
-        yield self.env.timeout(ix_time)
-
-        # PTWR process 
-        start_q_consultant = self.env.now
-        with self.consultant.request() as req:
-            yield req
-            end_q_consultant = self.env.now
-            # need to consider changing this to log normal
-            patient.q_time_consultant = end_q_consultant - start_q_consultant
-            sampled_consultant_time = random.expovariate (1.0/ g.mean_consultant_time)
+                else:
+                # Fallback to using a take doctor if no SDEC doctor is available
+                    with self.take_doctor.request() as req_take:
+                        yield req_take
+                        end_q_doctor = self.env.now
+                        patient.q_time_doctor = end_q_doctor - start_q_doctor
+                        sampled_doctor_time = random.expovariate(1.0 / g.mean_take_doctor_time)
+                        yield self.env.timeout(sampled_doctor_time)
             
-            # Decision to admit
-            admission_probability = g.prob_sdec_admit 
-            if random.random() < admission_probability:
-                # Patient is admitted
+            patient.doctor_type = "SDEC Doctor" if sdec_used else "Take Doctor"
+        
+            # could include a proportion of patients discharged pre-PTWR as a proportion
+
+            # investigation sink
+            ix_time = random.expovariate(1.0 / g.mean_sdec_ix_time)
+            patient.ix_time = ix_time
+            yield self.env.timeout(ix_time)
+
+            # PTWR process 
+            start_q_consultant = self.env.now
+            with self.consultant.request() as req:
+                yield req
+                end_q_consultant = self.env.now
+                # need to consider changing this to log normal
+                patient.q_time_consultant = end_q_consultant - start_q_consultant
+                sampled_consultant_time = random.expovariate (1.0/ g.mean_consultant_time)
+                
+                # Decision to admit
+                admission_probability = g.prob_sdec_admit 
+                if random.random() < admission_probability:
+                    # Patient is admitted
+                    patient.disposition = "admitted"
+                    #decision_to_admit_time = self.env.now - patient.start_time
+                else:
+                    # Patient is discharged
+                    patient.disposition = "discharged"
+
+                yield self.env.timeout(sampled_consultant_time)
+
+            # timestamp for admission decision 
+            decision_to_admit_time = self.env.now - patient.start_time
+
+            # time_in_dept - calculate how long patient in dept in total
+            total_time = self.env.now - patient.start_time
+
+            # record outputs
+            self.results_df.loc[len(self.results_df)] = {
+                "Patient ID": patient.id,
+                "Patient Route": patient_route,
+                "Q Time Nurse": patient.q_time_nurse,
+                "Time with Nurse": sampled_nurse_time,
+                "Q Time Doctor": patient.q_time_doctor,
+                "Time with Doctor": sampled_doctor_time,
+                "Doctor Source": patient.doctor_type,
+                "Time for Ix": ix_time,
+                "Q Time Consultant": patient.q_time_consultant,
+                "Time with Consultant": sampled_consultant_time,
+                "Disposition Time": decision_to_admit_time,
+                "Patient Disposition": patient.disposition,
+                "Total Journey Time": total_time
+        }
+
+
+        elif patient_route == "ED Med Expect":
+        
+            print ("Patient arrived in ED")
+
+            # nurse triage process 
+            start_q_nurse = self.env.now
+            with self.nurse.request() as req:
+                yield req
+                end_q_nurse = self.env.now
+                # need to consider changing this to log normal
+                patient.q_time_nurse = end_q_nurse - start_q_nurse
+                sampled_nurse_time = random.expovariate (1.0/ g.mean_nurse_time)
+                yield self.env.timeout(sampled_nurse_time)
+
+            # doctor clerking process 
+            start_q_take_doctor = self.env.now
+            with self.take_doctor.request() as req:
+                yield req
+                end_q_take_doctor = self.env.now
+                # need to consider changing this to log normal
+                patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
+                sampled_take_doctor_time = random.expovariate (1.0/ g.mean_take_doctor_time)
+                yield self.env.timeout(sampled_take_doctor_time)
+
+                # Need to add in discharge probability here 
+            
+            #print ("Patient has been clerked")
+
+            # Assign PTWR status here - cardio vs medical
+            patient.flow = "cardio" if random.random() < g.prob_needs_cardioptwr else "medical"
+
+            # investigation sink
+            ix_time = random.expovariate(1.0 / g.mean_ed_med_expect_ix_time)
+            patient.ix_time = ix_time
+            yield self.env.timeout(ix_time)
+
+            #print ("Investigations complete")
+
+        # PTWR process: can either see a cardiology consultant or a medical consultant
+        # dependent on probability (proportion cardio v medicine)
+
+            if  patient.flow == "cardio":
+
                 patient.disposition = "admitted"
-                #decision_to_admit_time = self.env.now - patient.start_time
-            else:
-                # Patient is discharged
-                patient.disposition = "discharged"
 
-            yield self.env.timeout(sampled_consultant_time)
+                # cardio PTWR only happens at 0900 each day, essentially admitted 
+                start_q_cardio_consultant = self.env.now
+                with self.cardio_consultant.request() as req:
+                    yield req
+                    end_q_cardio_consultant = self.env.now
+                    #print ("Patient being seen on cardio PTWR")
+                    # need to consider changing this to log normal
+                    patient.q_time_cardio_consultant = end_q_cardio_consultant - start_q_cardio_consultant
+                    sampled_cardio_consultant_time = random.expovariate (1.0/ g.mean_cardio_consultant_time)
 
-        # timestamp for admission decision 
-        decision_to_admit_time = self.env.now - patient.start_time
+                    # Decision to admit
+                    admission_probability = g.prob_cardio_admit 
+                    if random.random() < admission_probability:
+                        # Patient is admitted
+                        patient.disposition = "admitted"
+                        #decision_to_admit_time = self.env.now - patient.start_time
+                    else:
+                        # Patient is discharged
+                        patient.disposition = "discharged"
 
-         # time_in_dept - calculate how long patient in dept in total
-        total_time = self.env.now - patient.start_time
+                    yield self.env.timeout(sampled_cardio_consultant_time)
 
-        # record outputs
-        self.results_df.loc[len(self.results_df)] = {
-            "Patient ID": patient.id,
-            "Patient Route": patient_route,
-            "Q Time Nurse": patient.q_time_nurse,
-            "Time with Nurse": sampled_nurse_time,
-            "Q Time Doctor": patient.q_time_doctor,
-            "Time with Doctor": sampled_doctor_time,
-            "Doctor Source": patient.doctor_type,
-            "Time for Ix": ix_time,
-            "Q Time Consultant": patient.q_time_consultant,
-            "Time with Consultant": sampled_consultant_time,
-            "Disposition Time": decision_to_admit_time,
-            "Patient Disposition": patient.disposition,
-            "Total Journey Time": total_time
+            else: # see a medical consultant 
+                
+                start_q_medical_consultant = self.env.now
+                acute_cons_used = False
+
+                # request acute consultant
+                with self.acute_consultant.request() as req_acute_cons:
+                    result = yield req_acute_cons | self.env.timeout(0)
+                    if req_acute_cons in result:
+                        acute_cons_used = True
+                        end_q_medical_consultant = self.env.now
+                        #print ("Patient being seen on medical PTWR")
+                        # need to consider changing this to log normal
+                        patient.q_time_medical_consultant = end_q_medical_consultant - start_q_medical_consultant
+                        sampled_medical_consultant_time = random.expovariate (1.0/ g.mean_medical_consultant_time)
+
+                    # Decision to admit
+                    admission_probability = g.prob_medical_expect_admit 
+                    if random.random() < admission_probability:
+                        # Patient is admitted
+                        patient.disposition = "admitted"
+                        #decision_to_admit_time = self.env.now - patient.start_time
+                    else:
+                        # Patient is discharged
+                        patient.disposition = "discharged"
+
+                    yield self.env.timeout(sampled_medical_consultant_time)
+            
+                # otherwise use the POD
+                else:
+                    with self.pod_consultant.request() as req_pod_cons:
+                    yield req_pod_cons
+                    end_q_medical_consultant = self.env.now
+                    #print ("Patient being seen on medical PTWR")
+                    # need to consider changing this to log normal
+                    patient.q_time_medical_consultant = end_q_medical_consultant - start_q_medical_consultant
+                    sampled_medical_consultant_time = random.expovariate (1.0/ g.mean_medical_consultant_time)
+
+                    # Decision to admit
+                    admission_probability = g.prob_medical_expect_admit 
+                    if random.random() < admission_probability:
+                        # Patient is admitted
+                        patient.disposition = "admitted"
+                        #decision_to_admit_time = self.env.now - patient.start_time
+                    else:
+                        # Patient is discharged
+                        patient.disposition = "discharged"
+
+                patient.PTWR_type = "Acute Consultant" if sdec_used else "POD Consultant"
+        
+            # timestamp for admission decision 
+            decision_to_admit_time = self.env.now - patient.start_time
+
+            # time_in_dept - calculate how long patient in dept in total
+            total_time_ed = self.env.now - patient.start_time
+
+            # record outputs
+            self.results_df.loc[len(self.results_df)] = {
+                "Patient ID": patient.id,
+                "Patient Route": patient_route,
+                "Q Time Nurse": patient.q_time_nurse,
+                "Time with Nurse": sampled_nurse_time,
+                "Q Time Take Doctor": patient.q_time_take_doctor,
+                "Time with Take Doctor": sampled_take_doctor_time,
+                "Time for Ix": ix_time,
+                "Type of PTWR": patient.flow,
+                "Q Time Cardio Consultant": getattr(patient, "q_time_cardio_consultant", 0.0),
+                "Q Time Medical Consultant": getattr(patient, "q_time_medical_consultant", 0.0),
+                "Time with Cardio Consultant": sampled_cardio_consultant_time if patient.flow == "cardio" else 0.0,
+                "Time with Medical Consultant": sampled_medical_consultant_time if patient.flow == "medical" else 0.0,
+                "Disposition Time": decision_to_admit_time,
+                "Patient Disposition": patient.disposition,
+                "Total Journey Time": total_time_ed
         }
 
-
-    elif patient_route == "ED Med Expect":
-    
-         print ("Patient arrived in ED")
-
-         # nurse triage process 
-        start_q_nurse = self.env.now
-        with self.nurse.request() as req:
-            yield req
-            end_q_nurse = self.env.now
-            # need to consider changing this to log normal
-            patient.q_time_nurse = end_q_nurse - start_q_nurse
-            sampled_nurse_time = random.expovariate (1.0/ g.mean_nurse_time)
-            yield self.env.timeout(sampled_nurse_time)
-
-        # doctor clerking process 
-        start_q_take_doctor = self.env.now
-        with self.take_doctor.request() as req:
-            yield req
-            end_q_take_doctor = self.env.now
-            # need to consider changing this to log normal
-            patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
-            sampled_take_doctor_time = random.expovariate (1.0/ g.mean_take_doctor_time)
-            yield self.env.timeout(sampled_take_doctor_time)
-
-            # Need to add in discharge probability here 
+        else:
         
-        #print ("Patient has been clerked")
+            print ("Patient referred from ED")
 
-        # Assign PTWR status here - cardio vs medical
-        patient.flow = "cardio" if random.random() < g.prob_needs_cardioptwr else "medical"
-
-        # investigation sink
-        ix_time = random.expovariate(1.0 / g.mean_ed_med_expect_ix_time)
-        patient.ix_time = ix_time
-        yield self.env.timeout(ix_time)
-
-        #print ("Investigations complete")
-
-        # PTWR process: can either see a cardiology consultant or a medical consultant
-        # dependent on probability (proportion cardio v medicine)
-
-        if  patient.flow == "cardio":
-
-            patient.disposition = "admitted"
-
-            # cardio PTWR only happens at 0900 each day, essentially admitted 
-            start_q_cardio_consultant = self.env.now
-            with self.cardio_consultant.request() as req:
+            # doctor clerking process 
+            start_q_take_doctor = self.env.now
+            with self.take_doctor.request() as req:
                 yield req
-                end_q_cardio_consultant = self.env.now
-                #print ("Patient being seen on cardio PTWR")
+                end_q_take_doctor = self.env.now
                 # need to consider changing this to log normal
-                patient.q_time_cardio_consultant = end_q_cardio_consultant - start_q_cardio_consultant
-                sampled_cardio_consultant_time = random.expovariate (1.0/ g.mean_cardio_consultant_time)
+                patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
+                sampled_take_doctor_time = random.expovariate (1.0/ g.mean_take_doctor_time)
+                yield self.env.timeout(sampled_take_doctor_time)
 
-                # Decision to admit
-                admission_probability = g.prob_cardio_admit 
-                if random.random() < admission_probability:
-                    # Patient is admitted
-                    patient.disposition = "admitted"
-                    #decision_to_admit_time = self.env.now - patient.start_time
-                else:
-                    # Patient is discharged
-                    patient.disposition = "discharged"
-
-                yield self.env.timeout(sampled_cardio_consultant_time)
-
-        else: # see a medical consultant 
+                # Need to add in discharge probability here 
             
-            start_q_medical_consultant = self.env.now
-            with self.medical_consultant.request() as req:
-                yield req
-                end_q_medical_consultant = self.env.now
-                #print ("Patient being seen on medical PTWR")
-                # need to consider changing this to log normal
-                patient.q_time_medical_consultant = end_q_medical_consultant - start_q_medical_consultant
-                sampled_medical_consultant_time = random.expovariate (1.0/ g.mean_medical_consultant_time)
+            #print ("Patient has been clerked")
 
-                # Decision to admit
-                admission_probability = g.prob_medical_expect_admit 
-                if random.random() < admission_probability:
-                    # Patient is admitted
-                    patient.disposition = "admitted"
-                    #decision_to_admit_time = self.env.now - patient.start_time
-                else:
-                    # Patient is discharged
-                    patient.disposition = "discharged"
-
-                yield self.env.timeout(sampled_medical_consultant_time)
-        
-        # timestamp for admission decision 
-        decision_to_admit_time = self.env.now - patient.start_time
-
-        # time_in_dept - calculate how long patient in dept in total
-        total_time_ed = self.env.now - patient.start_time
-
-        # record outputs
-        self.results_df.loc[len(self.results_df)] = {
-            "Patient ID": patient.id,
-            "Patient Route": patient_route,
-            "Q Time Nurse": patient.q_time_nurse,
-            "Time with Nurse": sampled_nurse_time,
-            "Q Time Take Doctor": patient.q_time_take_doctor,
-            "Time with Take Doctor": sampled_take_doctor_time,
-            "Time for Ix": ix_time,
-            "Type of PTWR": patient.flow,
-            "Q Time Cardio Consultant": getattr(patient, "q_time_cardio_consultant", 0.0),
-            "Q Time Medical Consultant": getattr(patient, "q_time_medical_consultant", 0.0),
-            "Time with Cardio Consultant": sampled_cardio_consultant_time if patient.flow == "cardio" else 0.0,
-            "Time with Medical Consultant": sampled_medical_consultant_time if patient.flow == "medical" else 0.0,
-            "Disposition Time": decision_to_admit_time,
-            "Patient Disposition": patient.disposition,
-            "Total Journey Time": total_time_ed
-        }
-
-    else:
-    
-        print ("Patient referred from ED")
-
-        # doctor clerking process 
-        start_q_take_doctor = self.env.now
-        with self.take_doctor.request() as req:
-            yield req
-            end_q_take_doctor = self.env.now
-            # need to consider changing this to log normal
-            patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
-            sampled_take_doctor_time = random.expovariate (1.0/ g.mean_take_doctor_time)
-            yield self.env.timeout(sampled_take_doctor_time)
-
-            # Need to add in discharge probability here 
-        
-        #print ("Patient has been clerked")
-
-        # Assign PTWR status here - cardio vs medical
-        patient.flow = "cardio" if random.random() < g.prob_needs_cardioptwr else "medical"
+            # Assign PTWR status here - cardio vs medical
+            patient.flow = "cardio" if random.random() < g.prob_needs_cardioptwr else "medical"
 
 
-        # investigation sink
-        ix_time = random.expovariate(1.0 / g.mean_ed_ix_time)
-        patient.ix_time = ix_time
-        yield self.env.timeout(ix_time)
+            # investigation sink
+            ix_time = random.expovariate(1.0 / g.mean_ed_ix_time)
+            patient.ix_time = ix_time
+            yield self.env.timeout(ix_time)
 
-        #print ("Investigations complete")
+            #print ("Investigations complete")
 
-        # PTWR process: can either see a cardiology consultant or a medical consultant
-        # dependent on probability (proportion cardio v medicine)
+            # PTWR process: can either see a cardiology consultant or a medical consultant
+            # dependent on probability (proportion cardio v medicine)
 
-        if  patient.flow == "cardio":
+            if  patient.flow == "cardio":
 
-            patient.disposition = "admitted"
+                patient.disposition = "admitted"
 
-            # cardio PTWR only happens at 0900 each day, essentially admitted 
-            start_q_cardio_consultant = self.env.now
-            with self.cardio_consultant.request() as req:
-                yield req
-                end_q_cardio_consultant = self.env.now
-                #print ("Patient being seen on cardio PTWR")
-                # need to consider changing this to log normal
-                patient.q_time_cardio_consultant = end_q_cardio_consultant - start_q_cardio_consultant
-                sampled_cardio_consultant_time = random.expovariate (1.0/ g.mean_cardio_consultant_time)
+                # cardio PTWR only happens at 0900 each day, essentially admitted 
+                start_q_cardio_consultant = self.env.now
+                with self.cardio_consultant.request() as req:
+                    yield req
+                    end_q_cardio_consultant = self.env.now
+                    #print ("Patient being seen on cardio PTWR")
+                    # need to consider changing this to log normal
+                    patient.q_time_cardio_consultant = end_q_cardio_consultant - start_q_cardio_consultant
+                    sampled_cardio_consultant_time = random.expovariate (1.0/ g.mean_cardio_consultant_time)
 
-                # Decision to admit
-                admission_probability = g.prob_cardio_admit 
-                if random.random() < admission_probability:
-                    # Patient is admitted
-                    patient.disposition = "admitted"
-                    #decision_to_admit_time = self.env.now - patient.start_time
-                else:
-                    # Patient is discharged
-                    patient.disposition = "discharged"
+                    # Decision to admit
+                    admission_probability = g.prob_cardio_admit 
+                    if random.random() < admission_probability:
+                        # Patient is admitted
+                        patient.disposition = "admitted"
+                        #decision_to_admit_time = self.env.now - patient.start_time
+                    else:
+                        # Patient is discharged
+                        patient.disposition = "discharged"
 
-                yield self.env.timeout(sampled_cardio_consultant_time)
+                    yield self.env.timeout(sampled_cardio_consultant_time)
 
-        else: # see a medical consultant 
+            else: # see a medical consultant 
             
-            start_q_medical_consultant = self.env.now
-            with self.medical_consultant.request() as req:
-                yield req
-                end_q_medical_consultant = self.env.now
-                #print ("Patient being seen on medical PTWR")
-                # need to consider changing this to log normal
-                patient.q_time_medical_consultant = end_q_medical_consultant - start_q_medical_consultant
-                sampled_medical_consultant_time = random.expovariate (1.0/ g.mean_medical_consultant_time)
+                start_q_medical_consultant = self.env.now
+                with self.medical_consultant.request() as req:
+                    yield req
+                    end_q_medical_consultant = self.env.now
+                    #print ("Patient being seen on medical PTWR")
+                    # need to consider changing this to log normal
+                    patient.q_time_medical_consultant = end_q_medical_consultant - start_q_medical_consultant
+                    sampled_medical_consultant_time = random.expovariate (1.0/ g.mean_medical_consultant_time)
 
-                # Decision to admit
-                admission_probability = g.prob_medical_admit 
-                if random.random() < admission_probability:
-                    # Patient is admitted
-                    patient.disposition = "admitted"
-                    #decision_to_admit_time = self.env.now - patient.start_time
-                else:
-                    # Patient is discharged
-                    patient.disposition = "discharged"
+                    # Decision to admit
+                    admission_probability = g.prob_medical_admit 
+                    if random.random() < admission_probability:
+                        # Patient is admitted
+                        patient.disposition = "admitted"
+                        #decision_to_admit_time = self.env.now - patient.start_time
+                    else:
+                        # Patient is discharged
+                        patient.disposition = "discharged"
 
-                yield self.env.timeout(sampled_medical_consultant_time)
+                    yield self.env.timeout(sampled_medical_consultant_time)
         
-        # timestamp for admission decision 
-        decision_to_admit_time = self.env.now - patient.start_time
+            # timestamp for admission decision 
+            decision_to_admit_time = self.env.now - patient.start_time
 
-        # time_in_dept - calculate how long patient in dept in total
-        total_time_ed = self.env.now - patient.start_time
+            # time_in_dept - calculate how long patient in dept in total
+            total_time_ed = self.env.now - patient.start_time
 
-        # record outputs
-        self.results_df.loc[len(self.results_df)] = {
-            "Patient ID": patient.id,
-            "Patient Route": patient_route,
-            "Q Time Take Doctor": patient.q_time_take_doctor,
-            #"Number of Patients Clerked":
-            "Time with Take Doctor": sampled_take_doctor_time,
-            "Time for Ix": ix_time,
-            "Type of PTWR": patient.flow,
-            #"Number of Patients seen by Cardio":
-            #"Number of Patients seen by Medicine": 
-            "Q Time Cardio Consultant": getattr(patient, "q_time_cardio_consultant", 0.0),
-            "Q Time Medical Consultant": getattr(patient, "q_time_medical_consultant", 0.0),
-            "Time with Cardio Consultant": sampled_cardio_consultant_time if patient.flow == "cardio" else 0.0,
-            "Time with Medical Consultant": sampled_medical_consultant_time if patient.flow == "medical" else 0.0,
-            "Disposition Time": decision_to_admit_time,
-            "Patient Disposition": patient.disposition,
-            "Total Journey Time": total_time_ed
+            # record outputs
+            self.results_df.loc[len(self.results_df)] = {
+                "Patient ID": patient.id,
+                "Patient Route": patient_route,
+                "Q Time Take Doctor": patient.q_time_take_doctor,
+                #"Number of Patients Clerked":
+                "Time with Take Doctor": sampled_take_doctor_time,
+                "Time for Ix": ix_time,
+                "Type of PTWR": patient.flow,
+                #"Number of Patients seen by Cardio":
+                #"Number of Patients seen by Medicine": 
+                "Q Time Cardio Consultant": getattr(patient, "q_time_cardio_consultant", 0.0),
+                "Q Time Medical Consultant": getattr(patient, "q_time_medical_consultant", 0.0),
+                "Time with Cardio Consultant": sampled_cardio_consultant_time if patient.flow == "cardio" else 0.0,
+                "Time with Medical Consultant": sampled_medical_consultant_time if patient.flow == "medical" else 0.0,
+                "Disposition Time": decision_to_admit_time,
+                "Patient Disposition": patient.disposition,
+                "Total Journey Time": total_time_ed
+            }
 
     def calculate_run_result (self):
         self.mean_q_time_nurse = self.results_df["Q Time Nurse"].mean()
@@ -413,8 +444,8 @@ class Trial:
     #run the trial!
     def run_trial(self):
         for run in range(g.number_of_runs):
-            ed_med_expect_model = ED_Med_Expect_Model(run)
-            ed_med_expect_model.run ()
+            medical_take_model = Model(run)
+            medical_take_model.run ()
 
             self.df_trial_results.loc[len(self.df_trial_results)] = {
                 "Run Number": run,
