@@ -26,6 +26,9 @@ class g:
     number_of_cardio_consultants = 1
 
     # probabilities
+    sdec_probability = 0.4
+    ed_probability = 0.4
+    ed_med_expect_probability = 0.2
     prob_doctor_discharge = 0.1
     prob_sdec_admit = 0.3
     prob_cardio_admit = 0.7
