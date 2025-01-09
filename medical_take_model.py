@@ -63,4 +63,62 @@ def generator_patient_arrival (self):
 
 def attend_hospital (self, patient):
 
-        patient_route = "SDEC"
+    # define patient route here (SDEC, Med Expect, ED)
+    patient_route = "SDEC"
+
+    # patient sees a nurse for triage if they attend SDEC or ED Med Expect 
+    if patient_route == "SDEC" or "ED Med Expect":
+        start_q_nurse = self.env.now
+        with self.nurse.request() as req:
+            yield req
+            end_q_nurse = self.env.now
+            # need to consider changing this to log normal
+            patient.q_time_nurse = end_q_nurse - start_q_nurse
+            sampled_nurse_time = random.expovariate (1.0/ g.mean_nurse_time)
+            yield self.env.timeout(sampled_nurse_time)
+    
+    # see medical doctor
+    start_q_doctor = self.env.now
+    sdec_used = False
+
+    # for SDEC patients
+    if patient_route == "SDEC":
+        
+        with self.sdec_doctor.request() as req_sdec:
+            result = yield req_sdec | self.env.timeout(0)  # Try to acquire SDEC doctor immediately
+            if req_sdec in result:
+                sdec_used = True
+                end_q_doctor = self.env.now
+                patient.q_time_doctor = end_q_doctor - start_q_doctor
+                sampled_doctor_time = random.expovariate(1.0 / g.mean_sdec_doctor_time)
+                yield self.env.timeout(sampled_doctor_time)
+            else:
+            # Fallback to using a take doctor if no SDEC doctor is available
+                with self.take_doctor.request() as req_take:
+                    yield req_take
+                    end_q_doctor = self.env.now
+                    patient.q_time_doctor = end_q_doctor - start_q_doctor
+                    sampled_doctor_time = random.expovariate(1.0 / g.mean_take_doctor_time)
+                    yield self.env.timeout(sampled_doctor_time)
+        
+        patient.doctor_type = "SDEC Doctor" if sdec_used else "Take Doctor"
+
+    # for patients in ED (Med Expect or ED referral)
+    else:
+        with self.take_doctor.request() as req_take:
+            yield req_take
+            end_q_doctor = self.env.now
+            patient.q_time_doctor = end_q_doctor - start_q_doctor
+            sampled_doctor_time = random.expovariate(1.0 / g.mean_take_doctor_time)
+            yield self.env.timeout(sampled_doctor_time)
+
+    # investigation sink (ED takes less time than SDEC or med expect)
+    if patient_route == "ED":
+
+
+    else:
+        ix_time = random.expovariate(1.0 / g.mean_sdec_ix_time)
+        patient.ix_time = ix_time
+        yield self.env.timeout(ix_time)
+
+    # see consultant
