@@ -6,15 +6,31 @@ class g:
     ed_med_expect_inter = 90
 
     # consult times 
-    mean_nurse_time = 20
-    mean_sdec_doctor_time = 60 # need to edit this for different grades
-    mean_take_doctor_time = 60 # need to edit this for different grades
-    mean_consultant_time = 20
-    mean_cardio_consultant_time = 20
-    mean_medical_consultant_time = 20
-    mean_sdec_ix_time = 90
-    mean_ed_ix_time = 30
-    mean_ed_med_expect_ix_time = 90
+    min_nurse_time = 10
+    min_doctor_time = 40
+    min_consultant_time = 10 
+    min_ix_time = 30
+    min_ed_ix_time = 10 
+    min_amu_occupancy_time = 1440
+
+    mean_nurse_time = 10
+    mean_sdec_doctor_time = 30 # need to edit this for different grades
+    mean_take_doctor_time = 30 # need to edit this for different grades
+    mean_consultant_time = 10
+    mean_cardio_consultant_time = 10
+    mean_medical_consultant_time = 10
+    mean_sdec_ix_time = 60
+    mean_ed_ix_time = 20
+    mean_ed_med_expect_ix_time = 60
+    mean_amu_bed_occupancy_time = 1440
+
+    # opening times
+    sdec_open = 10
+    sdec_closed = 19
+
+    # staff availability 
+    cardio_start = 9
+    cardio_finish = 11
 
     #resources
     number_of_nurses = 4
@@ -24,6 +40,9 @@ class g:
     number_of_acute_med_consultants = 1
     number_of_pod_consultants = 1
     number_of_cardio_consultants = 1
+    number_of_sdec_cubicles = 10 
+    number_of_amu_beds = 30
+    number_of_amu_beds_with_boarding = 34
 
     # probabilities
     sdec_probability = 0.4
@@ -35,7 +54,6 @@ class g:
     prob_medical_admit = 0.9
     prob_medical_expect_admit = 0.8
     prob_needs_cardioptwr = 0.1
-
 
     #sim meta data 
     warm_up_period = 1440 # 24 hour warm up period 
@@ -56,10 +74,14 @@ class Patient:
         self.q_time_consultant = 0
         self.q_time_medical_consultant = 0
         self.q_time_cardio_consultant = 0
+        self.q_time_bed = 0
         self.ix_time = 0
         self.total_time_in_dept = 0
         self.disposition = None
         self.decision_to_admit_time = 0 
+        self.time_patient_got_bed = 0
+        self.doctor_type = None
+        self.consultant_type = None
        #self.news_score
        #self.frailty
        #self.age 
