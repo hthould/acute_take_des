@@ -50,9 +50,9 @@ class g:
     ed_med_expect_probability = 0.2
     prob_doctor_discharge = 0.1
     prob_sdec_admit = 0.3
-    prob_cardio_admit = 0.7
-    prob_medical_admit = 0.9
-    prob_medical_expect_admit = 0.8
+    prob_cardio_admit = 0.8
+    prob_medical_admit = 0.95
+    prob_medical_expect_admit = 0.95
     prob_needs_cardioptwr = 0.1
 
     #sim meta data 
@@ -75,6 +75,7 @@ class Patient:
         self.q_time_medical_consultant = 0
         self.q_time_cardio_consultant = 0
         self.q_time_bed = 0
+        self.bed_allocation= 0 
         self.ix_time = 0
         self.total_time_in_dept = 0
         self.disposition = None

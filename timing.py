@@ -24,6 +24,14 @@ def extract_hour(simulation_time):
     total_minutes = int(simulation_time % 1440)  # Get remainder of time in the current day
     return total_minutes // 60  # Return only the hour as an integer
 
+def get_doctor_patient_count(self, doctor_type):
+    return self.doctor_patient_counter.get(doctor_type, 0)
+
+def get_consultant_patient_count(self, consultant_type):
+    return self.consultant_patient_counter.get(consultant_type, 0)
+
+
+
 '''def calc_hour_of_day (simulation_time):
 
     # converts simulation time (in minutes) to hours of the day 
