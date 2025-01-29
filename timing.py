@@ -27,7 +27,7 @@ def extract_hour(simulation_time):
 '''def calc_hour_of_day (simulation_time):
 
     # converts simulation time (in minutes) to hours of the day 
-    '''
+
 
 def obstruct_cardiologist(self):
     while True:
@@ -137,4 +137,4 @@ def obstruct_acute_med_consultant(self):
 
             # Wait until the next hour to check again
             yield self.env.timeout(60)
-    
+    '''
