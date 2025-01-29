@@ -54,7 +54,7 @@ class Model:
         self.mean_q_time_cardio_consultant = 0 
         self.mean_q_time_bed = 0
 
-        self.patient_disposition = {"admitted":0, "discharged": 0}
+        self.patient_disposition = {"admitted": 0, "discharged": 0}
         self.patient_route = {"SDEC": 0, "ED Med Expect": 0, "ED": 0}
         self.doctor_patient_counter = {"SDEC Doctor": 0, "Take Doctor": 0}
         self.consultant_patient_counter = {"SDEC Consultant": 0, "Acute Consultant": 0, "POD Consultant": 0, "Cardio Consultant": 0}
@@ -723,9 +723,9 @@ class Model:
         self.sdec_cons_count = self.consultant_patient_counter.get("SDEC Consultant",0)
         self.acute_cons_count = self.consultant_patient_counter.get("Acute Consultant",0)
         self.pod_cons_count = self.consultant_patient_counter.get("POD Consultant",0)
-        self.med_cons_count_total = self.sdec_cons_count + self.acute_cons_count + self.pod_cons_count,
-        self.total_admissions = self.patient_disposition.get("admitted",0),
-        self.total_discharges = self.patient_disposition.get("discharged",0),
+        self.med_cons_count_total = self.sdec_cons_count + self.acute_cons_count + self.pod_cons_count
+        self.total_admissions = self.patient_disposition.get("admitted",0)
+        self.total_discharges = self.patient_disposition.get("discharged",0)
 
         '''
         summary = {
