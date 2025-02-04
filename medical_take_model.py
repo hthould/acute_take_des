@@ -1,6 +1,7 @@
 import pandas as pd
 import simpy
 import random
+import streamlit as st 
 
 from class_def import g 
 from class_def import Patient 
@@ -9,7 +10,7 @@ from timing import calculate_day_of_week
 from timing import extract_hour
 from timing import get_doctor_patient_count
 from timing import get_consultant_patient_count
-
+from timing import check_take_doctor_numbers
 
 class Model: 
 
@@ -23,8 +24,8 @@ class Model:
             capacity = g.number_of_nurses)
         self.sdec_doctor = simpy.Resource (self.env, 
             capacity = g.number_of_sdec_doctors)
-        self.take_doctor = simpy.Resource (self.env, 
-            capacity = g.number_of_take_doctors)
+        #self.take_doctor = simpy.Resource (self.env, 
+            #capacity = g.number_of_take_doctors)
         self.acute_consultant = simpy.Resource (self.env, 
             capacity = g.number_of_acute_med_consultants)
         self.sdec_consultant = simpy.Resource (self.env, 
@@ -36,6 +37,14 @@ class Model:
         self.amu_bed = simpy.Resource (self.env, 
             capacity = g.number_of_amu_beds)
         self.run_number = run_number 
+
+        # dynamic resources
+        self.take_doctor = simpy.Resource (self.env, 
+            capacity = g.number_of_take_doctors)
+        #self.env.process(self.check_take_doctor_numbers()
+        
+
+
         self.results_df = pd.DataFrame (columns= [
             "Run ID", "Patient ID", "Patient Route", "Q Time Nurse", "Time with Nurse", "Doctor Source",
             "Q Time Doctor", "Time with Doctor", "Time for Ix", "Consultant Source",
@@ -47,6 +56,7 @@ class Model:
             "POD Consultant Count", "Total Medical Consultant Count" "Total admissions", 
             "Total discharges", "Total seen in SDEC", "Total Med Expect seen in ED", "Total referred by ED", "Total seen in ED"])
         self.results_df.set_index("Patient ID", inplace=True)
+
 
         self.mean_q_time_nurse = 0
         self.mean_q_time_doctor = 0
@@ -798,8 +808,10 @@ class Trial:
                 "Mean Journey Time": medical_take_model.mean_journey_time
             }
         self.print_trial_results()
+        return (self.df_trial_results)
 
 print ("Model warming up")
 
 trial_1 = Trial ()
-trial_1.run_trial()
+results_df = trial_1.run_trial()
+
