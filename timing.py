@@ -31,6 +31,30 @@ def get_consultant_patient_count(self, consultant_type):
     return self.consultant_patient_counter.get(consultant_type, 0)
 
 
+def check_take_doctor_numbers (self):
+    while True:
+        hour_of_day = extract_hour (self.env.now)
+
+        if 0 <= hour_of_day < 9:
+            take_doctor_numbers = 2
+        elif 9 <= hour_of_day < 14:
+            take_doctor_numbers = 3
+        elif 14 <= hour_of_day < 21:
+            take_doctor_numbers = 7
+        elif 21 <= hour_of_day < 24:
+            take_doctor_numbers = 4
+
+        if take_doctor_numbers != self.number_of_take_doctors:
+            self.number_of_take_doctors = take_doctor_numbers
+            self.take_doctor = simpy.Resource(self.env, capacity=self.number_of_take_doctors)
+
+            print(f"Updated take doctors to {self.number_of_take_doctors} at time {self.env.now}")
+
+        yield self.env.timeout(1)
+
+
+
+
 
 '''def calc_hour_of_day (simulation_time):
 
