@@ -6,6 +6,7 @@ import datetime
 import numpy as np
 import math
 
+
 def calculate_hour_of_day(simulation_time):
     """Converts the simulation time (in minutes) to a readable time of day (HH:MM)."""
     total_minutes = int(simulation_time % 1440)  # Get remainder of time in current day
@@ -52,14 +53,7 @@ def check_take_doctor_numbers (self):
 
         yield self.env.timeout(1)
 
-
-
-
-
-'''def calc_hour_of_day (simulation_time):
-
-    # converts simulation time (in minutes) to hours of the day 
-
+'''
 
 def obstruct_cardiologist(self):
     while True:
@@ -169,4 +163,5 @@ def obstruct_acute_med_consultant(self):
 
             # Wait until the next hour to check again
             yield self.env.timeout(60)
-    '''
+
+'''
