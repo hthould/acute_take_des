@@ -35,6 +35,8 @@ class g:
     # staff availability 
     cardio_start = 9
     cardio_finish = 11
+    sdec_consultant_start = 11
+    sdec_consultant_finish = 19
     consultant_start = 8
     consultant_finish = 20
 
@@ -91,6 +93,8 @@ class Patient:
         self.doctor_type = None
         self.consultant_type = None
         self.admission_prob = 0
+        self.aw_cardio_ptwr_count = 0 
+        self.admit_aw_ptwr_count = 0 
        #self.news_score
        #self.frailty
        #self.age 
