@@ -61,7 +61,7 @@ class Model:
             "POD Consultant Count", "Total Medical Consultant Count" "Total admissions", 
             "Total discharges", "Total seen in SDEC", "Total Med Expect seen in ED", "Total referred by ED", "Total seen in ED"])
         #self.results_df.set_index("Patient ID", inplace=True)
-        self.csv_file = "simulation_results.csv"
+        #self.csv_file = "simulation_results.csv"
 
         self.attendance_time = 0
         self.mean_q_time_nurse = 0
@@ -983,7 +983,7 @@ class Model:
         print (f"Run Number {self.run_number}")
         print (self.results_df)
 
-        self.results_df.to_csv ()
+        #self.results_df.to_csv ()
 
 #Trial class
 class Trial:
