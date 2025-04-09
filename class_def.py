@@ -1,3 +1,4 @@
+from timing import check_take_doctor_numbers
 
 class g:
     # patient arrivals 
@@ -6,11 +7,11 @@ class g:
     ed_med_expect_inter = 90
 
     # consult times 
-    min_nurse_time = 10
-    min_doctor_time = 40
+    min_nurse_time = 15
+    min_doctor_time = 60
     min_consultant_time = 10 
-    min_ix_time = 30
-    min_ed_ix_time = 10 
+    min_ix_time = 45
+    min_ed_ix_time = 30 
     min_amu_occupancy_time = 1440
 
     mean_nurse_time = 10
@@ -28,14 +29,21 @@ class g:
     sdec_open = 10
     sdec_closed = 19
 
+    #sdec_day_open = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    #sdec_day_closed = ["Saturday", "Sunday"] 
+
     # staff availability 
     cardio_start = 9
     cardio_finish = 11
+    sdec_consultant_start = 11
+    sdec_consultant_finish = 19
+    consultant_start = 8
+    consultant_finish = 20
 
     #resources
     number_of_nurses = 4
     number_of_sdec_doctors = 2
-    number_of_take_doctors = 3
+    number_of_take_doctors = 2
     number_of_sdec_consultants = 1
     number_of_acute_med_consultants = 1
     number_of_pod_consultants = 1
@@ -49,14 +57,14 @@ class g:
     ed_probability = 0.4
     ed_med_expect_probability = 0.2
     prob_doctor_discharge = 0.1
-    prob_sdec_admit = 0.3
+    prob_sdec_admit = 0.4
     prob_cardio_admit = 0.8
     prob_medical_admit = 0.95
     prob_medical_expect_admit = 0.95
     prob_needs_cardioptwr = 0.1
 
     #sim meta data 
-    warm_up_period = 1440 # 24 hour warm up period 
+    warm_up_period = 10080 # 24 hour warm up period 
     trial_period = 2880 # 2 days 
     sim_duration = warm_up_period + trial_period
     number_of_runs = 3
@@ -69,6 +77,7 @@ class Patient:
         self.id = patient_id
         self.start_time = 0
         self.q_time_nurse = 0
+        self.q_sdec_bed = 0 
         self.q_time_doctor = 0 
         self.q_time_take_doctor = 0
         self.q_time_consultant = 0
@@ -83,6 +92,9 @@ class Patient:
         self.time_patient_got_bed = 0
         self.doctor_type = None
         self.consultant_type = None
+        self.admission_prob = 0
+        self.aw_cardio_ptwr_count = 0 
+        self.admit_aw_ptwr_count = 0 
        #self.news_score
        #self.frailty
        #self.age 
