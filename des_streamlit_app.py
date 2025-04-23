@@ -111,7 +111,9 @@ with tab2:
         results = pd.read_csv ("/Users/hannah/Documents/Medicine/Chief Registrar/acute_take_des/results.csv")
         results = results.sort_values (by = "Start Time")
 
-        fig_time_1 = px.line (results, 
+        results_after_warm_up = results[results["Start Time in Days"] >= 7]
+
+        fig_time_1 = px.line (results_after_warm_up, 
                        x = "Start Time in Days", 
                        y = "Journey Time: Admission to Disposition (h)",
                        color = "Run ID",
@@ -120,7 +122,7 @@ with tab2:
         
         median_value = results['Journey Time: Admission to Disposition (h)'].median()
 
-        fig_time_1.update_yaxes(range=[0, 12])
+        fig_time_1.update_yaxes(range=[0, 100])
         fig_time_1.add_hline(y=median_value, 
               line_dash="dash", 
               line_color="yellow", 
@@ -147,7 +149,11 @@ with tab2:
 
         # graph to demonstrate queue time for a bed (from disposition)
 
-        fig_queue_bed = px.histogram (results,
+        #results_after_warm_up = results[(results["Start Time in Days"] >= 7) &
+                                            #(results["Patient Disposition"] == "admitted")
+        #]
+
+        fig_queue_bed = px.line (results_after_warm_up,
                                  x = "Start Time in Days",
                                  y = "Q Time AMU Bed",
                                  color = "Run ID",
