@@ -51,10 +51,11 @@ class Model:
         
 
         self.results_df = pd.DataFrame (columns= [
-            "Run ID", "Patient ID", "Start Time", "Start Time in Days", "Patient Route", "Q Time Nurse", "Time with Nurse", "Doctor Source",
-            "Q Time Doctor", "Time with Doctor", "Time for Ix", "Consultant Source",
-            "Q Time Consultant", "Time with Consultant",
-            "Disposition Time", "Patient Disposition", "Journey Time: Admission to Disposition (h)", "Admission Probability", "Number of patients discharged", 
+            "Run ID", "Patient ID", "Start Time", "Start Time in Days", "Patient Route", "Q Time Nurse", "Time with Nurse", 
+            "Time stamp Nurse", "Doctor Source", "Q Time Doctor", "Time with Doctor", "Time stamp Doctor", "Time for Ix", 
+            "Consultant Source","Q Time Consultant", "Time with Consultant", "Time stamp Consultant",
+            "Disposition Time", "Patient Disposition", "Journey Time: Admission to Disposition",
+            "Journey Time: Admission to Disposition (h)", "Admission Probability", "Number of patients discharged", 
             "Number of patient admitted", "Q Time AMU Bed", 
             "Number of patients awaiting a bed", "Time to AMU bed", "Journey Time: Admission to Bed (h)", "SDEC Doctor Count",
             "Take Doctor Count", "Cardio Consultant Count", "SDEC Consultant Count", "Acute Consultant Count",
@@ -148,6 +149,7 @@ class Model:
                 with self.nurse.request() as req:
                     yield req
                     end_q_nurse = self.env.now
+                    patient.nurse_timestamp = self.env.now
                     # need to consider changing this to log normal
                     patient.q_time_nurse = end_q_nurse - start_q_nurse
                     sampled_nurse_time = g.min_nurse_time + random.expovariate (1.0/ g.mean_nurse_time)
@@ -174,6 +176,7 @@ class Model:
                     if req_sdec in result:
                         sdec_used = True
                         end_q_doctor = self.env.now
+                        patient.doctor_timestamp = self.env.now
                         patient.q_time_doctor = end_q_doctor - start_q_doctor
                         sampled_doctor_time = g.min_doctor_time + random.expovariate(1.0 / g.mean_sdec_doctor_time)
                         yield self.env.timeout(sampled_doctor_time)
@@ -186,6 +189,7 @@ class Model:
                                 # SDEC doctor available after retry
                                 sdec_used = True
                                 end_q_doctor = self.env.now
+                                patient.doctor_timestamp = self.env.now
                                 patient.q_time_doctor = end_q_doctor - start_q_doctor
                                 sampled_doctor_time = g.min_doctor_time + random.expovariate(1.0 / g.mean_sdec_doctor_time)
                                 yield self.env.timeout(sampled_doctor_time)
@@ -194,6 +198,7 @@ class Model:
                                 with self.take_doctor.request() as req_take:
                                     yield req_take
                                     end_q_doctor = self.env.now
+                                    patient.doctor_timestamp = self.env.now
                                     patient.q_time_doctor = end_q_doctor - start_q_doctor
                                     sampled_doctor_time = g.min_doctor_time + random.expovariate(1.0 / g.mean_take_doctor_time)
                                     yield self.env.timeout(sampled_doctor_time)
@@ -224,6 +229,7 @@ class Model:
                     with self.sdec_consultant.request() as req:
                         yield req
                         end_q_consultant = self.env.now
+                        patient.consultant_timestamp = self.env.now
 
                         print (f"Patient {patient_id} being seen on PTWR")
 
@@ -296,6 +302,7 @@ class Model:
                     with self.pod_consultant.request() as req_pod_cons:
                         yield req_pod_cons
                         end_q_medical_consultant = self.env.now
+                        patient.consultant_timestamp = self.env.now
                         print (f"Patient {patient_id} being seen on medical PTWR")
                         # need to consider changing this to log normal
                         patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -343,6 +350,7 @@ class Model:
                 with self.nurse.request() as req:
                     yield req
                     end_q_nurse = self.env.now
+                    patient.nurse_timestamp = self.env.now
                     # need to consider changing this to log normal
                     patient.q_time_nurse = end_q_nurse - start_q_nurse
                     sampled_nurse_time = g.min_nurse_time + random.expovariate (1.0/ g.mean_nurse_time)
@@ -355,6 +363,7 @@ class Model:
                 with self.take_doctor.request() as req:
                     yield req
                     end_q_take_doctor = self.env.now
+                    patient.doctor_timestamp = self.env.now
                     # need to consider changing this to log normal
                     patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
                     sampled_doctor_time = g.min_doctor_time + random.expovariate (1.0/ g.mean_take_doctor_time)
@@ -396,6 +405,7 @@ class Model:
                         with self.cardio_consultant.request() as req:
                             yield req
                             end_q_cardio_consultant = self.env.now
+                            patient.consultant_timestamp = self.env.now
 
                             print (f"Patient {patient_id} being seen on cardio PTWR")
 
@@ -453,6 +463,7 @@ class Model:
                             if req_acute_cons in result:
                                 acute_cons_used = True
                                 end_q_medical_consultant = self.env.now
+                                patient.consultant_timestamp = self.env.now
                                 print (f"Patient {patient_id} being seen on medical PTWR")
                                 # need to consider changing this to log normal
                                 patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -485,6 +496,7 @@ class Model:
                                 with self.pod_consultant.request() as req_pod_cons:
                                     yield req_pod_cons
                                     end_q_medical_consultant = self.env.now
+                                    patient.consultant_timestamp = self.env.now
                                     print (f"Patient {patient_id} being seen on medical PTWR")
                                     # need to consider changing this to log normal
                                     patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -527,6 +539,7 @@ class Model:
             with self.nurse.request() as req:
                 yield req
                 end_q_nurse = self.env.now
+                patient.nurse_timestamp = self.env.now
                 # need to consider changing this to log normal
                 patient.q_time_nurse = end_q_nurse - start_q_nurse
                 sampled_nurse_time = g.min_nurse_time + random.expovariate (1.0/ g.mean_nurse_time)
@@ -539,6 +552,7 @@ class Model:
             with self.take_doctor.request() as req:
                 yield req
                 end_q_take_doctor = self.env.now
+                patient.doctor_timestamp = self.env.now
                 # need to consider changing this to log normal
                 patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
                 sampled_doctor_time = g.min_doctor_time + random.expovariate (1.0/ g.mean_take_doctor_time)
@@ -581,6 +595,7 @@ class Model:
                     with self.cardio_consultant.request() as req:
                         yield req
                         end_q_cardio_consultant = self.env.now
+                        patient.consultant_timestamp = self.env.now
 
                         print (f"Patient {patient_id} being seen on cardio PTWR")
 
@@ -634,6 +649,7 @@ class Model:
                         if req_acute_cons in result:
                             acute_cons_used = True
                             end_q_medical_consultant = self.env.now
+                            patient.consultant_timestamp = self.env.now
                             print (f"Patient {patient_id} being seen on medical PTWR")
                             # need to consider changing this to log normal
                             patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -666,6 +682,7 @@ class Model:
                             with self.pod_consultant.request() as req_pod_cons:
                                 yield req_pod_cons
                                 end_q_medical_consultant = self.env.now
+                                patient.consultant_timestamp = self.env.now
                                 print (f"Patient {patient_id} being seen on medical PTWR")
                                 # need to consider changing this to log normal
                                 patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -712,6 +729,7 @@ class Model:
             with self.take_doctor.request() as req:
                 yield req
                 end_q_take_doctor = self.env.now
+                patient.doctor_timestamp = self.env.now
                 # need to consider changing this to log normal
                 patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
                 sampled_doctor_time = g.min_doctor_time + random.expovariate (1.0/ g.mean_take_doctor_time)
@@ -752,6 +770,7 @@ class Model:
                     with self.cardio_consultant.request() as req:
                         yield req
                         end_q_cardio_consultant = self.env.now
+                        patient.consultant_timestamp = self.env.now
                         print (f"Patient {patient_id} being seen on cardio PTWR")
                         # need to consider changing this to log normal
                         patient.q_time_consultant = end_q_cardio_consultant - start_q_cardio_consultant
@@ -803,6 +822,7 @@ class Model:
                         if req_acute_cons in result:
                             acute_cons_used = True
                             end_q_medical_consultant = self.env.now
+                            patient.consultant_timestamp = self.env.now
                             print (f"Patient {patient_id} being seen on medical PTWR")
                             # need to consider changing this to log normal
                             patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -836,6 +856,7 @@ class Model:
                             with self.pod_consultant.request() as req_pod_cons:
                                 yield req_pod_cons
                                 end_q_medical_consultant = self.env.now
+                                patient.consultant_timestamp = self.env.now
                                 print (f"Patient {patient_id} being seen on medical PTWR")
                                 # need to consider changing this to log normal
                                 patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -871,7 +892,7 @@ class Model:
         print (f"Patient {patient_id}'s disposition is {patient.disposition}")
 
         # timestamp for admission decision 
-        decision_to_admit_time = self.env.now - self.attendance_time
+        decision_to_admit_time = self.env.now #- self.attendance_time
 
         # queue for a bed
         if patient.disposition == "admitted":
@@ -887,7 +908,7 @@ class Model:
                 patient.q_time_bed = end_q_bed - start_q_bed
                 print (f"The patient {patient_id} was assigned a bed at {end_q_bed} time")
 
-                # simulate how long the bed is occupied for
+                #simulate how long the bed is occupied for
                 sampled_amu_bed_occupancy_time = g.min_amu_occupancy_time + random.expovariate (1.0/ g.mean_amu_bed_occupancy_time)
                 yield self.env.timeout(sampled_amu_bed_occupancy_time)
 
@@ -924,16 +945,23 @@ class Model:
             "Patient Route": patient_route,
             "Q Time Nurse": patient.q_time_nurse, 
             "Time with Nurse": sampled_nurse_time,
+            #"Time stamp Nurse": (end_q_nurse if end_q_nurse != 0 else 0),
+            "Time stamp Nurse": (patient.nurse_timestamp if patient.nurse_timestamp != 0 else attendance_time),
             "Doctor Source": patient.doctor_type,
             "Q Time Doctor": patient.q_time_doctor,
             "Time with Doctor": sampled_doctor_time,
+            #"Time stamp Doctor": (end_q_doctor),
+            "Time stamp Doctor": patient.doctor_timestamp, 
             "Time for Ix": ix_time,
             "Consultant Source": patient.consultant_type,
             "Q Time Consultant": patient.q_time_consultant,
             "Time with Consultant": sampled_consultant_time,
+            #"Time stamp Consultant": (end_q_medical_consultant if end_q_medical_consultant != 0 else end_q_cardio_consultant), 
+            "Time stamp Consultant": (patient.consultant_timestamp if patient.consultant_timestamp != 0 else decision_to_admit_time),
             "Disposition Time": decision_to_admit_time,
             "Patient Disposition": patient.disposition,
-            "Journey Time: Admission to Disposition (h)": decision_to_admit_time /60 - attendance_time /60,
+            "Journey Time: Admission to Disposition": decision_to_admit_time - attendance_time,
+            "Journey Time: Admission to Disposition (h)": (decision_to_admit_time - attendance_time) /60,
             "Admission Probability": admission_probability,
             "Q Time AMU Bed": patient.q_time_bed,
             "Time to AMU bed": patient.bed_allocation,
