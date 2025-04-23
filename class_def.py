@@ -12,7 +12,7 @@ class g:
     min_consultant_time = 10 
     min_ix_time = 45
     min_ed_ix_time = 30 
-    min_amu_occupancy_time = 1440
+    min_amu_occupancy_time = 480
 
     mean_nurse_time = 10
     mean_sdec_doctor_time = 30 # need to edit this for different grades
@@ -23,7 +23,7 @@ class g:
     mean_sdec_ix_time = 60
     mean_ed_ix_time = 20
     mean_ed_med_expect_ix_time = 60
-    mean_amu_bed_occupancy_time = 1440
+    mean_amu_bed_occupancy_time = 720
 
     # opening times
     sdec_open = 10
@@ -49,7 +49,7 @@ class g:
     number_of_pod_consultants = 1
     number_of_cardio_consultants = 1
     number_of_sdec_cubicles = 10 
-    number_of_amu_beds = 30
+    number_of_amu_beds = 55 # A400 + A515
     number_of_amu_beds_with_boarding = 34
 
     # probabilities
@@ -64,8 +64,8 @@ class g:
     prob_needs_cardioptwr = 0.1
 
     #sim meta data 
-    warm_up_period = 10080 # 24 hour warm up period 
-    trial_period = 2880 # 2 days 
+    warm_up_period = 10080 # 7 day warm up period 
+    trial_period = 10080 # 7 day run 
     sim_duration = warm_up_period + trial_period
     number_of_runs = 3
 
@@ -95,6 +95,9 @@ class Patient:
         self.admission_prob = 0
         self.aw_cardio_ptwr_count = 0 
         self.admit_aw_ptwr_count = 0 
+        self.nurse_timestamp = 0
+        self.doctor_timestamp = 0
+        self.consultant_timestamp = 0 
        #self.news_score
        #self.frailty
        #self.age 
