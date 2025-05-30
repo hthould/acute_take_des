@@ -15,7 +15,8 @@ st.set_page_config(layout="wide")
 from class_def import g
 from timing import calculate_hour_of_day, calculate_day_of_week, extract_hour
 from timing import get_consultant_patient_count, get_doctor_patient_count, check_take_doctor_numbers
-from medical_take_model import Trial, Model
+#from medical_take_model import Trial, Model
+from temp_des import Trial, Model
 
 
 
@@ -24,7 +25,7 @@ st.title ("Medical Take discrete event simulation")
 
 st.divider ()
 
-tab1, tab2, tab3, tab4 = st.tabs(["Info", "Results", "Metrics", "Results table"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Background", "How to use me" "Results", "Metrics", "Results table"])
 
 #sidebar for inputs 
 with st.sidebar:
@@ -84,11 +85,21 @@ with st.sidebar:
 
     button_run_pressed = st.button("Run simulation")
 
-# first tab for introduction
+# first tab for how to use me 
 with tab1:
 
-    st.write ("This discrete event simulation (DES) is designed to model the take process."
-          " In this process, a patient is either referred to the hospital by primary care,"
+    st.write ("This discrete event simulation (DES) is designed to model the take process.")
+
+    st.write ("By changing the parameters located in the side bar to the left of the screen"
+              " you will be able to assess the effect of different staffing numbers, bed spaces"
+               " and SDEC opening times on patient flow.")
+    st.write ("Important info: This is an unvalidated model and incorporates a number of significant assumptions.")
+
+
+# second tab for introduction and background
+with tab2:
+
+    st.write (" In this process, a patient is either referred to the hospital by primary care,"
           " be that a GP or a paramedic, or by ED and is then seen in either SDEC or"
           " in ED, depending on referral source and patient acuity. Once seen by a resident"
           " doctor, they are then seen by a consultant and either discharged or"
@@ -97,13 +108,9 @@ with tab1:
           " through the medical take.")
 
     st.image("take_process_map.png", caption = "UHBW Medical Take Process Map")
-    
-    st.write ("By changing the parameters located in the side bar to the left of the screen"
-              " you will be able to assess the effect of different staffing numbers, bed spaces"
-               " and SDEC opening times on patient flow.")
 
-# second tab for charts 
-with tab2:
+# third  tab for charts 
+with tab3:
 
     if button_run_pressed:
 
@@ -155,7 +162,7 @@ with tab2:
 
         fig_queue_bed = px.line (results_after_warm_up,
                                  x = "Start Time in Days",
-                                 y = "Q Time AMU Bed",
+                                 y = "Time to AMU bed",
                                  color = "Run ID",
                                  title = "AMU Bed Waits",
                                  )
@@ -165,15 +172,15 @@ with tab2:
 
 
                          
-# third tab for metrics and dials
+# fourth tab for metrics and dials
 
-with tab3:
+with tab4:
 
     if button_run_pressed:
         st.write ("Filler xyz")   
 
-# fourth tab for results table 
-with tab4:
+# fifth tab for results table 
+with tab5:
 
     if button_run_pressed:
         results_df = Trial().run_trial()
