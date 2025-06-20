@@ -4,6 +4,7 @@ import random
 import streamlit as st 
 import os
 import uuid
+from datetime import datetime
 
 from class_def import g 
 from class_def import Patient 
@@ -24,6 +25,10 @@ class Model:
         self.run_number = run_number 
 
         self.patient_counter = 0 # used as a patient ID
+
+        self.event_log = pd.DataFrame(columns=[
+            "Run ID", "Patient ID", "Timestamp", "Event", "Resource", "Details"
+        ])
 
         # resources
         self.nurse = simpy.Resource (self.env, 
@@ -51,11 +56,10 @@ class Model:
         
 
         self.results_df = pd.DataFrame (columns= [
-            "Run ID", "Patient ID", "Start Time", "Start Time in Days", "Patient Route", "Q Time Nurse", "Time with Nurse", 
-            "Time stamp Nurse", "Doctor Source", "Q Time Doctor", "Time with Doctor", "Time stamp Doctor", "Time for Ix", 
-            "Consultant Source","Q Time Consultant", "Time with Consultant", "Time stamp Consultant",
-            "Disposition Time", "Patient Disposition", "Journey Time: Admission to Disposition",
-            "Journey Time: Admission to Disposition (h)", "Admission Probability", "Number of patients discharged", 
+            "Run ID", "Patient ID", "Start Time", "Start Time in Days", "Patient Route", "Q Time Nurse", "Time with Nurse", "Doctor Source",
+            "Q Time Doctor", "Time with Doctor", "Time for Ix", "Consultant Source",
+            "Q Time Consultant", "Time with Consultant",
+            "Disposition Time", "Patient Disposition", "Journey Time: Admission to Disposition (h)", "Admission Probability", "Number of patients discharged", 
             "Number of patient admitted", "Q Time AMU Bed", 
             "Number of patients awaiting a bed", "Time to AMU bed", "Journey Time: Admission to Bed (h)", "SDEC Doctor Count",
             "Take Doctor Count", "Cardio Consultant Count", "SDEC Consultant Count", "Acute Consultant Count",
@@ -81,6 +85,18 @@ class Model:
         self.aw_cardio_ptwr_count = 0
         self.admit_aw_ptwr_count = 0 
        
+    def log_event(self, patient_id, event_name, resource=None, details=None):
+        self.event_log.loc[len(self.event_log)] = {
+            "Run ID": self.run_number,
+            "Patient ID": patient_id,
+            "Timestamp": self.env.now,
+            "Event": event_name,
+            "Resource": resource,
+            "Details": details
+        }
+
+
+
     # generator - patient arrives at hospital
     def generator_patient_arrival (self):
         while True:
@@ -93,6 +109,7 @@ class Model:
             #patient_id = uuid.uuid4()
 
             #print(f"Generating Patient {patient_id} at time {p.start_time}")
+            
 
             #randomly sample time to patient arrival
             sampled_inter = random.expovariate (1.0/ g.sdec_patient_inter)
@@ -103,10 +120,6 @@ class Model:
 # patients being discharged along the way
 
     def attend_hospital (self, patient):
-
-        #set baselines as zero
-        sampled_consultant_time = 0 
-        admission_probability = 1 # patients default to admitted unless seen by doctor/ PTWR
 
         patient_id = uuid.uuid4()
 
@@ -122,6 +135,8 @@ class Model:
         patient_route = random.choices(poss_patient_route, route_probabilities)[0]
 
         print(f"Patient {patient_id}'s pathway is {patient_route}")
+        self.log_event(patient_id, "Arrival", details=f"Route: {patient_route}")
+
 
         if patient_route == "SDEC":
 
@@ -142,20 +157,27 @@ class Model:
             if g.sdec_open <= hour_of_day < g.sdec_closed:
             
                 print(f"Patient {patient_id} arrived in SDEC")
+                self.log_event(patient_id, "Arrival at Department", details=f"Patient arrived in {patient_route}")
+
                 self.patient_route[patient_route] += 1
 
                 # nurse triage process 
                 start_q_nurse = self.env.now
+                # Waiting for nurse
+                self.log_event(patient_id, "Start Service", resource="Nurse")
                 with self.nurse.request() as req:
                     yield req
                     end_q_nurse = self.env.now
-                    patient.nurse_timestamp = self.env.now
                     # need to consider changing this to log normal
                     patient.q_time_nurse = end_q_nurse - start_q_nurse
                     sampled_nurse_time = g.min_nurse_time + random.expovariate (1.0/ g.mean_nurse_time)
                     yield self.env.timeout(sampled_nurse_time)
 
                 print(f" Patient {patient_id} spent {sampled_nurse_time} with the nurse")
+
+                # Finished with nurse
+                self.log_event(patient_id, "Service Complete", resource="Nurse", details=f"Duration: {sampled_nurse_time:.2f}")
+
                 
                 '''
                 # await a bed space 
@@ -170,13 +192,13 @@ class Model:
                 # medical clerking process 
                 start_q_doctor = self.env.now
                 sdec_used = False
-            
+                self.log_event(patient_id, "Request Service", resource="SDEC Doctor")
                 with self.sdec_doctor.request() as req_sdec:
                     result = yield req_sdec | self.env.timeout(0)  # Try to acquire SDEC doctor immediately
                     if req_sdec in result:
+                        self.log_event(patient_id, "Request Granted", resource="SDEC Doctor", details=f"Immediately")
                         sdec_used = True
                         end_q_doctor = self.env.now
-                        patient.doctor_timestamp = self.env.now
                         patient.q_time_doctor = end_q_doctor - start_q_doctor
                         sampled_doctor_time = g.min_doctor_time + random.expovariate(1.0 / g.mean_sdec_doctor_time)
                         yield self.env.timeout(sampled_doctor_time)
@@ -187,18 +209,18 @@ class Model:
                             retry_result = yield retry_req_sdec | self.env.timeout(0)
                             if retry_req_sdec in retry_result:
                                 # SDEC doctor available after retry
+                                self.log_event(patient_id, "Request Granted", resource="SDEC Doctor", details=f"After retry")
                                 sdec_used = True
                                 end_q_doctor = self.env.now
-                                patient.doctor_timestamp = self.env.now
                                 patient.q_time_doctor = end_q_doctor - start_q_doctor
                                 sampled_doctor_time = g.min_doctor_time + random.expovariate(1.0 / g.mean_sdec_doctor_time)
                                 yield self.env.timeout(sampled_doctor_time)
                             else:
                                 # Fallback to using a take doctor if no SDEC doctor is available
                                 with self.take_doctor.request() as req_take:
+                                    self.log_event(patient_id, "Request Granted", resource="Take Doctor", details=f"After failed SDEC Retry")
                                     yield req_take
                                     end_q_doctor = self.env.now
-                                    patient.doctor_timestamp = self.env.now
                                     patient.q_time_doctor = end_q_doctor - start_q_doctor
                                     sampled_doctor_time = g.min_doctor_time + random.expovariate(1.0 / g.mean_take_doctor_time)
                                     yield self.env.timeout(sampled_doctor_time)
@@ -207,7 +229,7 @@ class Model:
                 self.doctor_patient_counter[patient.doctor_type] += 1
 
                 print(f"Patient {patient_id} seen by {patient.doctor_type}")
-            
+                self.log_event(patient_id, "Service Started", resource=patient.doctor_type)
                 # could include a proportion of patients discharged pre-PTWR as a proportion
 
                 # investigation sink
@@ -215,6 +237,7 @@ class Model:
                 patient.ix_time = ix_time
 
                 print(f"Patient {patient_id} investigations complete")
+                self.log_event(patient_id, "Service Complete", resource="Doctor", details=f"Investigations Complete: {ix_time:.2f}")
                 yield self.env.timeout(ix_time)
 
                 # PTWR process 
@@ -229,9 +252,9 @@ class Model:
                     with self.sdec_consultant.request() as req:
                         yield req
                         end_q_consultant = self.env.now
-                        patient.consultant_timestamp = self.env.now
 
                         print(f"Patient {patient_id} being seen on PTWR")
+                        self.log_event(patient_id, "Service Started", resource="PTWR")
 
                         # need to consider changing this to log normal
                         patient.q_time_consultant = end_q_consultant - start_q_consultant
@@ -256,16 +279,17 @@ class Model:
                             self.patient_disposition[patient.disposition] += 1
 
                         print(f"The patient {patient_id} was {patient.disposition}")
+                        self.log_event(patient_id, "Disposition", resource=patient.consultant_type, details=patient.disposition)
 
                         yield self.env.timeout(sampled_consultant_time)
 
                 # if the sdec consultant has gone home, patients are seen by the medical consultant
-                elif g.sdec_consultant_finish <= hour_of_day < g.consultant_finish:
+                elif 12 <= hour_of_day < g.consultant_finish:
                     start_q_medical_consultant = self.env.now
-                    #acute_cons_used = False
+                    acute_cons_used = False
 
                     # request acute consultant
-                    '''with self.acute_consultant.request() as req_acute_cons:
+                    with self.acute_consultant.request() as req_acute_cons:
                         result = yield req_acute_cons | self.env.timeout(0)
                         if req_acute_cons in result:
                             acute_cons_used = True
@@ -295,41 +319,40 @@ class Model:
                             
                             print(f"The patient {patient_id} was {patient.disposition}")
 
-                            yield self.env.timeout(sampled_consultant_time)'''
+                            yield self.env.timeout(sampled_consultant_time)
                 
                         # otherwise use the POD
-                        #else:
-                    with self.pod_consultant.request() as req_pod_cons:
-                        yield req_pod_cons
-                        end_q_medical_consultant = self.env.now
-                        patient.consultant_timestamp = self.env.now
-                        print(f"Patient {patient_id} being seen on medical PTWR")
-                        # need to consider changing this to log normal
-                        patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
-                        sampled_consultant_time = g.min_consultant_time + random.expovariate (1.0/ g.mean_medical_consultant_time)
-
-                        patient.consultant_type = "POD Consultant"
-                        self.consultant_patient_counter[patient.consultant_type] += 1
-
-                        # Decision to admit
-                        admission_probability = g.prob_medical_expect_admit
-
-                        #print(f"The admission probability for patient {patient_id} was {self.admission_prob} compared to {admission_probability}")
-
-                        if random.random() <= admission_probability:
-                            # Patient is admitted
-                            patient.disposition = "admitted"
-                            self.patient_disposition[patient.disposition] += 1
-                            #decision_to_admit_time = self.env.now - patient.start_time
                         else:
-                            # Patient is discharged
-                            patient.disposition = "discharged"
-                            self.patient_disposition[patient.disposition] += 1
+                            with self.pod_consultant.request() as req_pod_cons:
+                                yield req_pod_cons
+                                end_q_medical_consultant = self.env.now
+                                print(f"Patient {patient_id} being seen on medical PTWR")
+                                # need to consider changing this to log normal
+                                patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
+                                sampled_consultant_time = g.min_consultant_time + random.expovariate (1.0/ g.mean_medical_consultant_time)
 
-                        print(f"The patient {patient_id} was {patient.disposition}")
+                                patient.consultant_type = "POD Consultant"
+                                self.consultant_patient_counter[patient.consultant_type] += 1
 
-                    #patient.PTWR_type = "Acute Consultant" if acute_cons_used else "POD Consultant"
-                    patient.PTWR_type = "POD Consultant"
+                                # Decision to admit
+                                admission_probability = g.prob_medical_expect_admit
+
+                                #print(f"The admission probability for patient {patient_id} was {self.admission_prob} compared to {admission_probability}")
+
+                                if random.random() <= admission_probability:
+                                    # Patient is admitted
+                                    patient.disposition = "admitted"
+                                    self.patient_disposition[patient.disposition] += 1
+                                    #decision_to_admit_time = self.env.now - patient.start_time
+                                else:
+                                    # Patient is discharged
+                                    patient.disposition = "discharged"
+                                    self.patient_disposition[patient.disposition] += 1
+
+                                print(f"The patient {patient_id} was {patient.disposition}")
+                                self.log_event(patient_id, "Disposition", resource=patient.consultant_type, details=patient.disposition)
+
+                    patient.PTWR_type = "Acute Consultant" if acute_cons_used else "POD Consultant"
                 
                 # if the medical consultant has gone home, patients are admitted 
                 else:
@@ -350,7 +373,6 @@ class Model:
                 with self.nurse.request() as req:
                     yield req
                     end_q_nurse = self.env.now
-                    patient.nurse_timestamp = self.env.now
                     # need to consider changing this to log normal
                     patient.q_time_nurse = end_q_nurse - start_q_nurse
                     sampled_nurse_time = g.min_nurse_time + random.expovariate (1.0/ g.mean_nurse_time)
@@ -363,7 +385,6 @@ class Model:
                 with self.take_doctor.request() as req:
                     yield req
                     end_q_take_doctor = self.env.now
-                    patient.doctor_timestamp = self.env.now
                     # need to consider changing this to log normal
                     patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
                     sampled_doctor_time = g.min_doctor_time + random.expovariate (1.0/ g.mean_take_doctor_time)
@@ -405,7 +426,6 @@ class Model:
                         with self.cardio_consultant.request() as req:
                             yield req
                             end_q_cardio_consultant = self.env.now
-                            patient.consultant_timestamp = self.env.now
 
                             print(f"Patient {patient_id} being seen on cardio PTWR")
 
@@ -463,7 +483,6 @@ class Model:
                             if req_acute_cons in result:
                                 acute_cons_used = True
                                 end_q_medical_consultant = self.env.now
-                                patient.consultant_timestamp = self.env.now
                                 print(f"Patient {patient_id} being seen on medical PTWR")
                                 # need to consider changing this to log normal
                                 patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -496,7 +515,6 @@ class Model:
                                 with self.pod_consultant.request() as req_pod_cons:
                                     yield req_pod_cons
                                     end_q_medical_consultant = self.env.now
-                                    patient.consultant_timestamp = self.env.now
                                     print(f"Patient {patient_id} being seen on medical PTWR")
                                     # need to consider changing this to log normal
                                     patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -539,7 +557,6 @@ class Model:
             with self.nurse.request() as req:
                 yield req
                 end_q_nurse = self.env.now
-                patient.nurse_timestamp = self.env.now
                 # need to consider changing this to log normal
                 patient.q_time_nurse = end_q_nurse - start_q_nurse
                 sampled_nurse_time = g.min_nurse_time + random.expovariate (1.0/ g.mean_nurse_time)
@@ -552,7 +569,6 @@ class Model:
             with self.take_doctor.request() as req:
                 yield req
                 end_q_take_doctor = self.env.now
-                patient.doctor_timestamp = self.env.now
                 # need to consider changing this to log normal
                 patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
                 sampled_doctor_time = g.min_doctor_time + random.expovariate (1.0/ g.mean_take_doctor_time)
@@ -595,7 +611,6 @@ class Model:
                     with self.cardio_consultant.request() as req:
                         yield req
                         end_q_cardio_consultant = self.env.now
-                        patient.consultant_timestamp = self.env.now
 
                         print(f"Patient {patient_id} being seen on cardio PTWR")
 
@@ -649,7 +664,6 @@ class Model:
                         if req_acute_cons in result:
                             acute_cons_used = True
                             end_q_medical_consultant = self.env.now
-                            patient.consultant_timestamp = self.env.now
                             print(f"Patient {patient_id} being seen on medical PTWR")
                             # need to consider changing this to log normal
                             patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -682,7 +696,6 @@ class Model:
                             with self.pod_consultant.request() as req_pod_cons:
                                 yield req_pod_cons
                                 end_q_medical_consultant = self.env.now
-                                patient.consultant_timestamp = self.env.now
                                 print(f"Patient {patient_id} being seen on medical PTWR")
                                 # need to consider changing this to log normal
                                 patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -729,7 +742,6 @@ class Model:
             with self.take_doctor.request() as req:
                 yield req
                 end_q_take_doctor = self.env.now
-                patient.doctor_timestamp = self.env.now
                 # need to consider changing this to log normal
                 patient.q_time_take_doctor = end_q_take_doctor - start_q_take_doctor
                 sampled_doctor_time = g.min_doctor_time + random.expovariate (1.0/ g.mean_take_doctor_time)
@@ -770,7 +782,6 @@ class Model:
                     with self.cardio_consultant.request() as req:
                         yield req
                         end_q_cardio_consultant = self.env.now
-                        patient.consultant_timestamp = self.env.now
                         print(f"Patient {patient_id} being seen on cardio PTWR")
                         # need to consider changing this to log normal
                         patient.q_time_consultant = end_q_cardio_consultant - start_q_cardio_consultant
@@ -822,7 +833,6 @@ class Model:
                         if req_acute_cons in result:
                             acute_cons_used = True
                             end_q_medical_consultant = self.env.now
-                            patient.consultant_timestamp = self.env.now
                             print(f"Patient {patient_id} being seen on medical PTWR")
                             # need to consider changing this to log normal
                             patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -856,7 +866,6 @@ class Model:
                             with self.pod_consultant.request() as req_pod_cons:
                                 yield req_pod_cons
                                 end_q_medical_consultant = self.env.now
-                                patient.consultant_timestamp = self.env.now
                                 print(f"Patient {patient_id} being seen on medical PTWR")
                                 # need to consider changing this to log normal
                                 patient.q_time_consultant = end_q_medical_consultant - start_q_medical_consultant
@@ -892,7 +901,7 @@ class Model:
         print(f"Patient {patient_id}'s disposition is {patient.disposition}")
 
         # timestamp for admission decision 
-        decision_to_admit_time = self.env.now #- self.attendance_time
+        decision_to_admit_time = self.env.now - self.attendance_time
 
         # queue for a bed
         if patient.disposition == "admitted":
@@ -908,9 +917,9 @@ class Model:
                 patient.q_time_bed = end_q_bed - start_q_bed
                 print(f"The patient {patient_id} was assigned a bed at {end_q_bed} time")
 
-                #simulate how long the bed is occupied for
-                sampled_amu_bed_occupancy_time = g.min_amu_occupancy_time + random.expovariate (1.0/ g.mean_amu_bed_occupancy_time)
-                yield self.env.timeout(sampled_amu_bed_occupancy_time)
+                # simulate how long the bed is occupied for
+                #sampled_amu_bed_occupancy_time = g.min_amu_occupancy_time + random.expovariate (1.0/ g.mean_amu_bed_occupancy_time)
+                #yield self.env.timeout(sampled_amu_bed_occupancy_time)
 
         elif patient.disposition == "discharged":
             print(f"Patient {patient_id} was discharged")
@@ -918,7 +927,7 @@ class Model:
         print(f"Patient {patient_id}'s attendance time was {attendance_time}")
 
         # time_in_dept - calculate how long patient in dept until getting a bed
-        total_time = self.env.now - patient.bed_allocation 
+        total_time = self.env.now - patient.time_patient_got_bed
 
         '''
         # calculate the number of patients seen by each doctor type 
@@ -936,55 +945,46 @@ class Model:
         admit_to_amu_time = patient.bed_allocation - attendance_time
 
         # record outputs
-        #if attendance_time > g.warm_up_period:
-        self.results_df.loc[len(self.results_df)] = {
-            "Run ID": self.run_number, 
-            "Patient ID": patient_id,
-            "Start Time": attendance_time, 
-            "Start Time in Days": attendance_time / 1440,
-            "Patient Route": patient_route,
-            "Q Time Nurse": patient.q_time_nurse, 
-            "Time with Nurse": sampled_nurse_time,
-            #"Time stamp Nurse": (end_q_nurse if end_q_nurse != 0 else 0),
-            "Time stamp Nurse": (patient.nurse_timestamp if patient.nurse_timestamp != 0 else attendance_time),
-            "Doctor Source": patient.doctor_type,
-            "Q Time Doctor": patient.q_time_doctor,
-            "Time with Doctor": sampled_doctor_time,
-            #"Time stamp Doctor": (end_q_doctor),
-            "Time stamp Doctor": patient.doctor_timestamp, 
-            "Time for Ix": ix_time,
-            "Consultant Source": patient.consultant_type,
-            "Q Time Consultant": patient.q_time_consultant,
-            "Time with Consultant": sampled_consultant_time,
-            #"Time stamp Consultant": (end_q_medical_consultant if end_q_medical_consultant != 0 else end_q_cardio_consultant), 
-            "Time stamp Consultant": (patient.consultant_timestamp if patient.consultant_timestamp != 0 else decision_to_admit_time),
-            "Disposition Time": decision_to_admit_time,
-            "Patient Disposition": patient.disposition,
-            "Journey Time: Admission to Disposition": decision_to_admit_time - attendance_time,
-            "Journey Time: Admission to Disposition (h)": (decision_to_admit_time - attendance_time) /60,
-            "Admission Probability": admission_probability,
-            "Q Time AMU Bed": patient.q_time_bed,
-            "Time to AMU bed": patient.bed_allocation,
-            #"Journey Time: Admission to Bed (h)": patient.bed_allocation - attendance_time
-            "Journey Time: Admission to Bed (h)": (patient.bed_allocation - attendance_time 
-                                                   if patient.bed_allocation != 0 else 0),
-            "SDEC Doctor Count": self.doctor_patient_counter.get("SDEC Doctor", 0),
-            "Take Doctor Count": self.doctor_patient_counter.get("Take Doctor", 0),
-            "Cardio Consultant Count": self.consultant_patient_counter.get("Cardio Consultant", 0),
-            "SDEC Consultant Count": self.consultant_patient_counter.get("SDEC Consultant", 0),
-            "Acute Consultant Count": self.consultant_patient_counter.get("Acute Consultant", 0),
-            "POD Consultant Count": self.consultant_patient_counter.get("POD Consultant", 0),
-            "Total Medical Consultant Count": (
-                self.consultant_patient_counter.get("SDEC Consultant", 0) +
-                self.consultant_patient_counter.get("Acute Consultant", 0) +
-                self.consultant_patient_counter.get("POD Consultant", 0)),
-            "Total admissions": self.patient_disposition.get("admitted",0), 
-            "Total discharges": self.patient_disposition.get("discharged",0),
-            "Total seen in SDEC": self.patient_route.get("SDEC", 0),
-            "Total Med Expect seen in ED": self.patient_route.get("ED Med Expect", 0),
-            "Total referred by ED": self.patient_route.get("ED", 0),
-            "Total seen in ED": self.patient_route.get("ED",0) + self.patient_route.get("ED Med Expect", 0)
-            }
+        if attendance_time > g.warm_up_period:
+            self.results_df.loc[len(self.results_df)] = {
+                "Run ID": self.run_number, 
+                "Patient ID": patient_id,
+                "Start Time": attendance_time, 
+                "Start Time in Days": attendance_time / 1440,
+                "Patient Route": patient_route,
+                "Q Time Nurse": patient.q_time_nurse, 
+                "Time with Nurse": sampled_nurse_time,
+                "Doctor Source": patient.doctor_type,
+                "Q Time Doctor": patient.q_time_doctor,
+                "Time with Doctor": sampled_doctor_time,
+                "Time for Ix": ix_time,
+                "Consultant Source": patient.consultant_type,
+                "Q Time Consultant": patient.q_time_consultant,
+                "Time with Consultant": sampled_consultant_time,
+                "Disposition Time": decision_to_admit_time,
+                "Patient Disposition": patient.disposition,
+                "Journey Time: Admission to Disposition (h)": decision_to_admit_time /60 - attendance_time /60,
+                "Admission Probability": admission_probability,
+                "Q Time AMU Bed": patient.q_time_bed,
+                "Time to AMU bed": patient.bed_allocation,
+                "Journey Time: Admission to Bed (h)": patient.bed_allocation - attendance_time,
+                "SDEC Doctor Count": self.doctor_patient_counter.get("SDEC Doctor", 0),
+                "Take Doctor Count": self.doctor_patient_counter.get("Take Doctor", 0),
+                "Cardio Consultant Count": self.consultant_patient_counter.get("Cardio Consultant", 0),
+                "SDEC Consultant Count": self.consultant_patient_counter.get("SDEC Consultant", 0),
+                "Acute Consultant Count": self.consultant_patient_counter.get("Acute Consultant", 0),
+                "POD Consultant Count": self.consultant_patient_counter.get("POD Consultant", 0),
+                "Total Medical Consultant Count": (
+                    self.consultant_patient_counter.get("SDEC Consultant", 0) +
+                    self.consultant_patient_counter.get("Acute Consultant", 0) +
+                    self.consultant_patient_counter.get("POD Consultant", 0)),
+                "Total admissions": self.patient_disposition.get("admitted",0), 
+                "Total discharges": self.patient_disposition.get("discharged",0),
+                "Total seen in SDEC": self.patient_route.get("SDEC", 0),
+                "Total Med Expect seen in ED": self.patient_route.get("ED Med Expect", 0),
+                "Total referred by ED": self.patient_route.get("ED", 0),
+                "Total seen in ED": self.patient_route.get("ED",0) + self.patient_route.get("ED Med Expect", 0)
+                }
         
         # Write to CSV (append mode)
         file_path = 'results.csv'
@@ -1034,6 +1034,7 @@ class Trial:
             "Number of patient admitted", "Q Time AMU Bed", 
             "Number of patients awaiting a bed", "Mean Journey Time"
         ])
+        self.all_event_logs = [] 
 
     # print and record trial results
     def print_trial_results(self):
@@ -1046,6 +1047,14 @@ class Trial:
         for run in range(g.number_of_runs):
             medical_take_model = Model(run)
             medical_take_model.run ()
+
+            # Save the long event log for all patients
+            file_path = f"event_log_trail_{run_start_time}_run_{medical_take_model.run_number}.csv"
+            medical_take_model.event_log.to_csv(file_path, index=False)
+
+            self.all_event_logs.append(medical_take_model.event_log)
+
+
 
             self.df_trial_results.loc[len(self.df_trial_results)] = {
                 "Run Number": run,
@@ -1064,10 +1073,24 @@ class Trial:
                 "Mean Journey Time": medical_take_model.mean_journey_time
             }
         self.print_trial_results()
-        return (self.df_trial_results)
+
+        # Combine all logs into one DataFrame
+        master_event_log = pd.concat(self.all_event_logs, ignore_index=True)
+
+        # Save to CSV
+        master_event_log.to_csv("all_event_logs.csv", index=False)
+
+
+        return self.df_trial_results, master_event_log
+
+run_start_time = datetime.now().strftime('%Y-%m-%d_%H%M%S')
 
 print("Model warming up")
 
 trial_1 = Trial ()
-results_df = trial_1.run_trial()
+results_df, event_log_df = trial_1.run_trial()
+
+# Save the long event log for all patients
+file_path = f"events_log_trial_{run_start_time}.csv"
+event_log_df.to_csv(file_path, index=False)
 
