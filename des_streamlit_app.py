@@ -153,8 +153,8 @@ with tab3:
         results = results.sort_values (by = "Start Time")
         results['Run ID'] = results['Run ID'].astype(str)
 
-        results_after_warm_up = results[results["Start Time in Days"] >= 7]
-        results_after_warm_up['Run ID'] = results_after_warm_up['Run ID'].astype(str)
+        #results_after_warm_up = results[results["Start Time in Days"] >= 7]
+        #results_after_warm_up['Run ID'] = results_after_warm_up['Run ID'].astype(str)
 
         fig_time_1 = px.scatter (results, 
                        x = "Start Time in Days", 
@@ -399,6 +399,58 @@ with tab3:
 
         #st.plotly_chart(fig_sankey)
 
+        av_time_dta_run_1 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 1]['Journey Time (h)'].astype(float).mean()
+        av_time_dta_run_2 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 2]['Journey Time (h)'].astype(float).mean()
+        av_time_dta_run_3 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 3]['Journey Time (h)'].astype(float).mean()
+        combined_dta_av = pd.DataFrame([
+            {'Run ID': 1, 'Average Time to DTA': av_time_dta_run_1},
+            {'Run ID': 2, 'Average Time to DTA': av_time_dta_run_2},
+            {'Run ID': 3, 'Average Time to DTA': av_time_dta_run_3},
+        ])
+
+        av_time_amu_bed_run_1 = pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == 1]['Queue Time'].astype(float).mean()
+        av_time_amu_bed_run_2 = pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == 2]['Queue Time'].astype(float).mean()
+        av_time_amu_bed_run_3 = pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == 3]['Queue Time'].astype(float).mean()
+        combined_bed_av = pd.DataFrame([
+            {'Run ID': 1, 'Average Time to AMU Bed': av_time_amu_bed_run_1},
+            {'Run ID': 2, 'Average Time to AMU Bed': av_time_amu_bed_run_2},
+            {'Run ID': 3, 'Average Time to AMU Bed': av_time_amu_bed_run_3},
+        ])
+
+        av_queue_nurse_run_1 = pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == 1]['Queue Time'].astype(float).mean()
+        av_queue_nurse_run_2 = pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == 2]['Queue Time'].astype(float).mean()
+        av_queue_nurse_run_3 = pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == 3]['Queue Time'].astype(float).mean()
+        combined_nurse_av = pd.DataFrame([
+            {'Run ID': 1, 'Queue Time Nurse': av_queue_nurse_run_1},
+            {'Run ID': 2, 'Queue Time Nurse': av_queue_nurse_run_2},
+            {'Run ID': 3, 'Queue Time Nurse': av_queue_nurse_run_3},
+        ])
+        
+        av_queue_doctor_run_1 = pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == 1]['Queue Time'].astype(float).mean()
+        av_queue_doctor_run_2 = pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == 2]['Queue Time'].astype(float).mean()
+        av_queue_doctor_run_3 = pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == 3]['Queue Time'].astype(float).mean()
+        combined_doctor_av = pd.DataFrame([
+            {'Run ID': 1, 'Queue Time Doctor': av_queue_doctor_run_1},
+            {'Run ID': 2, 'Queue Time Doctor': av_queue_doctor_run_2},
+            {'Run ID': 3, 'Queue Time Doctor': av_queue_doctor_run_3},
+        ])
+
+        av_queue_consultant_run_1 = pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == 1]['Queue Time'].astype(float).mean()
+        av_queue_consultant_run_2 = pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == 2]['Queue Time'].astype(float).mean()
+        av_queue_consultant_run_3 = pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == 3]['Queue Time'].astype(float).mean()
+        combined_consultant_av = pd.DataFrame([
+            {'Run ID': 1, 'Queue Time Consultant': av_queue_consultant_run_1},
+            {'Run ID': 2, 'Queue Time Consultant': av_queue_consultant_run_2},
+            {'Run ID': 3, 'Queue Time Consultant': av_queue_consultant_run_3},
+        ])
+
+        summary_data = combined_dta_av.merge(combined_bed_av, on='Run ID') \
+                    .merge(combined_nurse_av, on='Run ID') \
+                    .merge(combined_doctor_av, on='Run ID') \
+                    .merge(combined_consultant_av, on='Run ID')
+        
+        summary_data.set_index('Run ID', inplace=True)
+
     else:
         st.write("Awaiting results...")
         
@@ -408,8 +460,27 @@ with tab3:
 with tab4:
 
     if button_run_pressed:
-        results_df = Trial().run_trial()
-        st.dataframe(results_df)
+
+         # Loop through Run IDs
+        #for run_id in [1, 2, 3]:
+            #row = {
+                #'Run ID': run_id,
+                #'Average Time to DTA': pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == run_id]['Journey Time (h)'].astype(float).mean(),
+                #'Average Time to AMU Bed': pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == run_id]['Queue Time (h)'].astype(float).mean(),
+                #'Queue Time Nurse': pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == run_id]['Queue Time'].astype(float).mean(),
+                #'Queue Time Doctor': pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == run_id]['Queue Time'].astype(float).mean(),
+                #'Queue Time Consultant': pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == run_id]['Queue Time'].astype(float).mean()
+            #}
+            #summary_data.append(row)
+
+        # Create the DataFrame
+        #summary_df_for_pdf = pd.DataFrame(summary_data)
+
+        # Set Run ID as the index
+        #summary_df_for_pdf.set_index('Run ID', inplace=True)
+
+
+        st.dataframe(summary_data)
 
         #pdf_name = st.text_input ("Type in a name for your PDF file")
 
