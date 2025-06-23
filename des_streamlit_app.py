@@ -339,65 +339,7 @@ with tab3:
         
         st.plotly_chart (fig_queue_bed_2)
 
-        # graph to show patient location over time (SDEC, ED, AMU)
-
-        sankey_df = latest_file
-
-        #sankey_df['Timestamp'] = pd.to_datetime(sankey_df['Timestamp'])
-
-        # create a list of transitions
-        event_pairs = {
-            'Arrival to hospital': 'Request Nurse',
-            'Request Nurse': 'Nurse Start',
-            'Nurse Start': 'Nurse Complete',
-            'Request Doctor': 'Doctor Start',
-            'Doctor Start': 'Doctor Complete',
-            'Ix Started': 'Ix Complete',
-            'Request Consultant': 'See Consultant',
-            'See Consultant': 'Consultant Complete',
-            'Request AMU Bed': 'AMU Bed Granted'
-        }
-        events_of_interest = list(event_pairs.keys())
-
-        filtered_sankey_df = sankey_df[sankey_df["Event"].isin(events_of_interest)]
-
-        # Pivot to wide format
-        pivot_sankey_df = filtered_sankey_df.pivot_table(
-            index=["Patient ID", "Run ID"],
-            columns="Event",
-            values="Timestamp",
-            aggfunc="first"
-        ).reset_index()
-
-        transitions = []
-
-        for _, row in pivot_sankey_df.iterrows():
-            for from_event, to_event in event_pairs.items():
-                if pd.notna(row.get(from_event)) and pd.notna(row.get(to_event)):
-                    transitions.append((from_event, to_event))
-
-        transition_df = pd.DataFrame(transitions, columns=["From", "To"])
-        transition_counts = transition_df.value_counts().reset_index(name="Count")
-
-        # Get unique labels and map them to indices
-        labels = list(set(transition_counts["From"]).union(set(transition_counts["To"])))
-        label_indices = {label: i for i, label in enumerate(labels)}
-
-        fig_sankey = go.Figure(data=[go.Sankey(
-            node=dict(
-                pad=15,
-                thickness=20,
-                line=dict(color="black", width=0.5),
-                label=labels
-            ),
-            link=dict(
-                source=[label_indices[f] for f in transition_counts["From"]],
-                target=[label_indices[t] for t in transition_counts["To"]],
-                value=transition_counts["Count"]
-            )
-        )])
-
-        #st.plotly_chart(fig_sankey)
+        # work out summary data 
 
         av_time_dta_run_1 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 1]['Journey Time (h)'].astype(float).mean()
         av_time_dta_run_2 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 2]['Journey Time (h)'].astype(float).mean()
