@@ -10,6 +10,7 @@ from timing import get_doctor_patient_count
 from timing import get_consultant_patient_count
 from timing import check_take_doctor_numbers
 
+
 def check_sdec_open (self, patient, patient_id, g):
     # check if SDEC is open
     current_time = self.env.now 
