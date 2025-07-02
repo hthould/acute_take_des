@@ -11,6 +11,10 @@ import plotly.express as px
 import os
 import glob
 import plotly.graph_objects as go
+from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog
+import io
 
 #streamlit app set up 
 st.set_page_config(layout="wide")
@@ -40,12 +44,12 @@ with st.sidebar:
 
     st.divider()
 
-    st.write ("Press the button below if you would like to run the simulation acccording"
-              " to the current rota")
-    run_as_timetable = st.button ("Rota numbers")
+    #st.write ("Press the button below if you would like to run the simulation acccording"
+              #" to the current rota")
+    #run_as_timetable = st.button ("Rota numbers")
     #if run_as_timetable:
 
-    st.divider()
+    #st.divider()
 
     st.write("If you'd like to alter any of the staffing numbers, do so using the sliders below")
 
@@ -70,6 +74,7 @@ with st.sidebar:
     st.write ("Use the sliders below to change the number of cubicles or bed spaces")
     sdec_cubicles_slider = st.slider("Number of SDEC cubicles", min_value= 5, max_value= 20, value= 10)
     amu_beds_slider = st.slider("Number of AMU beds", min_value= 10, max_value= 50, value= 30)
+    #amu_los_slider = st.slider('AMU length of stay (h)', min_value= 4, max_value= 168, value= 28)
 
     # carry the slider inputs into the g class 
     g.trial_period = trial_length_slider * 1440
@@ -83,6 +88,7 @@ with st.sidebar:
     g.sdec_closed = sdec_closed_slider
     g.number_of_sdec_cubicles = sdec_cubicles_slider
     g.number_of_amu_beds = amu_beds_slider
+    #g.min_amu_occupancy_time = amu_los_slider * 60 
 
     button_run_pressed = st.button("Run simulation")
 
@@ -114,6 +120,8 @@ with tab2:
 
 # third  tab for charts 
 with tab3:
+
+    st.title("Results")
 
     # Use session state to remember if trial has been run
     if 'trial_ran' not in st.session_state:
@@ -168,11 +176,11 @@ with tab3:
         fig_time_1.update_yaxes(range=[0, 12])
         fig_time_1.add_hline(y=median_value, 
               line_dash="dash", 
-              line_color="yellow", 
+              line_color="black", 
               annotation_text=f"Median: {median_value:.2f}",
               annotation_position="top left")
         
-        st.plotly_chart (fig_time_1)
+        #st.plotly_chart (fig_time_1)
 
         # Alternative datae source (event log)
 
@@ -215,12 +223,14 @@ with tab3:
                        color = "Run ID",
                        title = "Time until Decision To Admit (DTA)",
                        )
-        fig_time_a.update_traces(marker_size = 5)
+        
+        mean_value = pivot_filtered_df_arriv_disp["Journey Time (h)"].mean()
 
-        fig_time_a.add_hline(y=median_value, 
+        fig_time_a.update_traces(marker_size = 5)
+        fig_time_a.add_hline(y=mean_value, 
               line_dash="dash", 
-              line_color="yellow", 
-              annotation_text=f"Median: {median_value:.2f}",
+              line_color="black", 
+              annotation_text=f"Mean: {mean_value:.2f}",
               annotation_position="top left")
         
         st.plotly_chart(fig_time_a)
@@ -239,7 +249,7 @@ with tab3:
                             color = "Queue Type",
                             title = "Clinical Queue Times over Time"
                             )
-        st.plotly_chart (fig_queue)
+        #st.plotly_chart (fig_queue)
 
         # alternative data source (event log)
 
@@ -296,6 +306,11 @@ with tab3:
                             color = "Queue Type",
                             title = "Clinical Queue Times over Time"
                             )
+        fig_queue_2.update_layout(
+            xaxis=dict(range=[0, 14]),  # Example: fix x-axis from day 0 to 7
+            yaxis=dict(range=[0, 100])  # Example: fix y-axis from 0 to 10 hours
+        
+        )
         st.plotly_chart (fig_queue_2)
         # graph to demonstrate queue time for a bed (from disposition)
 
@@ -311,7 +326,7 @@ with tab3:
                                  color = "Run ID",
                                  title = "AMU Bed Waits",
                                  )
-        st.plotly_chart (fig_queue_bed)
+        #st.plotly_chart (fig_queue_bed)
 
         # using alternative event log data source
 
@@ -331,67 +346,59 @@ with tab3:
                                  color = "Run ID",
                                  title = "Time to AMU Bed from Admission",
                                  )
-        fig_queue_bed_2.add_hline(y=median_value, 
+        
+        mean_value1 = pivot_filtered_df_queue_bed["Queue Time (h)"].mean()
+        fig_queue_bed_2.add_hline(y=mean_value1, 
               line_dash="dash", 
-              line_color="yellow", 
-              annotation_text=f"Median: {median_value:.2f}",
+              line_color="black", 
+              annotation_text=f"Mean: {mean_value1:.2f}",
               annotation_position="top left")
+        
+        fig_queue_bed_2.update_layout(
+            xaxis=dict(range=[0, 14]),  
+            yaxis=dict(range=[0, 100])  
+        )  
         
         st.plotly_chart (fig_queue_bed_2)
 
         # work out summary data 
 
-        av_time_dta_run_1 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 1]['Journey Time (h)'].astype(float).mean()
-        av_time_dta_run_2 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 2]['Journey Time (h)'].astype(float).mean()
-        av_time_dta_run_3 = pivot_filtered_df_arriv_disp[pivot_filtered_df_arriv_disp['Run ID'] == 3]['Journey Time (h)'].astype(float).mean()
-        combined_dta_av = pd.DataFrame([
-            {'Run ID': 1, 'Average Time to DTA': av_time_dta_run_1},
-            {'Run ID': 2, 'Average Time to DTA': av_time_dta_run_2},
-            {'Run ID': 3, 'Average Time to DTA': av_time_dta_run_3},
-        ])
+        # mean queue times 
+        # Group by Run ID and Resource, then calculate the mean queue time
+        mean_queue_times = combined_queue_df.groupby(['Run ID', 'Queue Type'])['Queue Time'].mean().reset_index()
 
-        av_time_amu_bed_run_1 = pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == 1]['Queue Time'].astype(float).mean()
-        av_time_amu_bed_run_2 = pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == 2]['Queue Time'].astype(float).mean()
-        av_time_amu_bed_run_3 = pivot_filtered_df_queue_bed[pivot_filtered_df_queue_bed['Run ID'] == 3]['Queue Time'].astype(float).mean()
-        combined_bed_av = pd.DataFrame([
-            {'Run ID': 1, 'Average Time to AMU Bed': av_time_amu_bed_run_1},
-            {'Run ID': 2, 'Average Time to AMU Bed': av_time_amu_bed_run_2},
-            {'Run ID': 3, 'Average Time to AMU Bed': av_time_amu_bed_run_3},
-        ])
+        # Pivot to get one row per Run ID with each Resource as a column
+        summary_by_resource = mean_queue_times.pivot(index='Run ID', columns='Queue Type', values='Queue Time').reset_index()
 
-        av_queue_nurse_run_1 = pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == 1]['Queue Time'].astype(float).mean()
-        av_queue_nurse_run_2 = pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == 2]['Queue Time'].astype(float).mean()
-        av_queue_nurse_run_3 = pivot_filtered_df_queue_nurse[pivot_filtered_df_queue_nurse['Run ID'] == 3]['Queue Time'].astype(float).mean()
-        combined_nurse_av = pd.DataFrame([
-            {'Run ID': 1, 'Queue Time Nurse': av_queue_nurse_run_1},
-            {'Run ID': 2, 'Queue Time Nurse': av_queue_nurse_run_2},
-            {'Run ID': 3, 'Queue Time Nurse': av_queue_nurse_run_3},
-        ])
-        
-        av_queue_doctor_run_1 = pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == 1]['Queue Time'].astype(float).mean()
-        av_queue_doctor_run_2 = pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == 2]['Queue Time'].astype(float).mean()
-        av_queue_doctor_run_3 = pivot_filtered_df_queue_doctor[pivot_filtered_df_queue_doctor['Run ID'] == 3]['Queue Time'].astype(float).mean()
-        combined_doctor_av = pd.DataFrame([
-            {'Run ID': 1, 'Queue Time Doctor': av_queue_doctor_run_1},
-            {'Run ID': 2, 'Queue Time Doctor': av_queue_doctor_run_2},
-            {'Run ID': 3, 'Queue Time Doctor': av_queue_doctor_run_3},
-        ])
+        # Optional: rename columns for clarity
+        summary_by_resource = summary_by_resource.rename(columns={
+            'Nurse': 'Queue Time Nurse (mins)',
+            'Doctor': 'Queue Time Doctor (mins)',
+            'Consultant': 'Queue Time Consultant (mins)',
+        })
 
-        av_queue_consultant_run_1 = pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == 1]['Queue Time'].astype(float).mean()
-        av_queue_consultant_run_2 = pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == 2]['Queue Time'].astype(float).mean()
-        av_queue_consultant_run_3 = pivot_filtered_df_queue_consultant[pivot_filtered_df_queue_consultant['Run ID'] == 3]['Queue Time'].astype(float).mean()
-        combined_consultant_av = pd.DataFrame([
-            {'Run ID': 1, 'Queue Time Consultant': av_queue_consultant_run_1},
-            {'Run ID': 2, 'Queue Time Consultant': av_queue_consultant_run_2},
-            {'Run ID': 3, 'Queue Time Consultant': av_queue_consultant_run_3},
-        ])
+        # Set 'Run ID' as index 
+        summary_by_resource.set_index('Run ID', inplace=True)
 
-        summary_data = combined_dta_av.merge(combined_bed_av, on='Run ID') \
-                    .merge(combined_nurse_av, on='Run ID') \
-                    .merge(combined_doctor_av, on='Run ID') \
-                    .merge(combined_consultant_av, on='Run ID')
-        
-        summary_data.set_index('Run ID', inplace=True)
+        # mean DTA time
+        mean_dta_times = pivot_filtered_df_arriv_disp.groupby('Run ID')['Journey Time (h)'].mean().reset_index()
+        mean_dta_times = mean_dta_times.rename(columns={'Journey Time (h)': 'Mean Time to DTA (h)'})
+
+        # Reset index to merge on Run ID
+        summary_with_dta = summary_by_resource.reset_index().merge(mean_dta_times, on='Run ID')
+
+        # Set Run ID as index again 
+        summary_with_dta.set_index('Run ID', inplace=True)
+
+        # mean time to AMU bed 
+        mean_bed_times = pivot_filtered_df_queue_bed.groupby('Run ID')['Queue Time (h)'].mean().reset_index()
+        mean_bed_times = mean_bed_times.rename(columns={'Queue Time (h)': 'Mean Time to AMU Bed (h)'})
+
+        # Reset index to merge on Run ID
+        summary_total = summary_with_dta.reset_index().merge(mean_bed_times, on='Run ID')
+
+        # Set Run ID as index again 
+        summary_total.set_index('Run ID', inplace=True)
 
     else:
         st.write("Awaiting results...")
@@ -421,45 +428,46 @@ with tab4:
         # Set Run ID as the index
         #summary_df_for_pdf.set_index('Run ID', inplace=True)
 
+        st.title("Summary Table")
 
-        st.dataframe(summary_data)
+        st.dataframe(summary_total)
 
         #pdf_name = st.text_input ("Type in a name for your PDF file")
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        pdf_button =  st.button ("Click here to download the results into a PDF")
+        # Create the figure and render the DataFrame as a table
+        def create_summary_pdf(df):
+            fig, ax = plt.subplots(figsize=(10, len(df) * 0.6 + 1))
+            ax.axis('off')
 
-        if pdf_button:
-            def df_to_pdf(results_df, filename="output.pdf"):
-                #pdf_name = st.text_input ("Type in a name for your PDF file")
+            table = ax.table(
+                cellText=df.reset_index().round(2).values,
+                colLabels=df.reset_index().columns,
+                cellLoc='center',
+                loc='center'
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(10)
 
-                pdf = canvas.Canvas(filename, pagesize=letter) 
-                width, height = letter
+            # Save to a BytesIO buffer instead of a file
+            buf = io.BytesIO()
+            plt.savefig(buf, format='pdf', bbox_inches='tight')
+            plt.close(fig)
+            buf.seek(0)
+            return buf
+        
+        pdf_buffer = create_summary_pdf(summary_total)
 
-                # Convert DataFrame to list of lists (including headers)
-                table_data = [results_df.columns.to_list()] + results_df.values.tolist()
-                
-                # Create Table
-                table = Table(table_data)
-                
-                # Add Styling
-                style = TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                    ])
-                table.setStyle(style)
+        # Offer download button
+        st.download_button(
+            label="📄 Download Summary as PDF",
+            data=pdf_buffer,
+            file_name="summary_table.pdf",
+            mime="application/pdf"
+        )
 
-                # Position Table in the PDF
-                table.wrapOn(pdf, width, height)
-                table.drawOn(pdf, 50, height - 200)  # Adjust positioning
 
-                pdf.save()
-                print(f"PDF saved as {filename}")
-
-            # Convert DataFrame to PDF
-            df_to_pdf(results_df, "dataframe_output.pdf")
+    else:
+        st.write("Awaiting results...")
 
